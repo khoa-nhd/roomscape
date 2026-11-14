@@ -84,3 +84,448 @@ body {
     width: max(100%, calc(46vh * var(--wall-aspect)));
   }
 }
+
+/* ---------- Motion ---------- */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Turning to face another wall. */
+.wall-from-right {
+  animation: wall-from-right 380ms var(--ease-out);
+}
+.wall-from-left {
+  animation: wall-from-left 380ms var(--ease-out);
+}
+@keyframes wall-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(7%) scale(1.03);
+  }
+}
+@keyframes wall-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-7%) scale(1.03);
+  }
+}
+
+/* The lights come on when the clock starts. */
+.lights-on {
+  animation: lights-on 1100ms linear both;
+}
+@keyframes lights-on {
+  0% {
+    filter: brightness(0);
+  }
+  18% {
+    filter: brightness(0.7);
+  }
+  26% {
+    filter: brightness(0.1);
+  }
+  40% {
+    filter: brightness(0.9);
+  }
+  48% {
+    filter: brightness(0.35);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* Feedback drawn on top of a hotspot. */
+.fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.fx-look {
+  border: 2px solid rgb(252 211 77 / 0.9);
+  animation: fx-ring 520ms var(--ease-out) forwards;
+}
+.fx-burst {
+  border: 3px solid rgb(110 231 183);
+  box-shadow:
+    0 0 28px rgb(110 231 183 / 0.7),
+    inset 0 0 28px rgb(110 231 183 / 0.35);
+  animation: fx-ring 800ms var(--ease-out) forwards;
+}
+@keyframes fx-ring {
+  from {
+    opacity: 1;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+.fx-denied {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  border: 2px solid rgb(248 113 113 / 0.9);
+  background: rgb(127 29 29 / 0.3);
+  animation: fx-denied 620ms ease-out forwards;
+}
+@keyframes fx-denied {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.9);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-7px) scale(1);
+  }
+  30% {
+    transform: translateX(7px);
+  }
+  45% {
+    transform: translateX(-5px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  75% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+.spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px;
+  border-radius: 9999px;
+  background: #fde68a;
+  box-shadow: 0 0 10px #fcd34d;
+  pointer-events: none;
+  animation: spark 750ms var(--ease-out) forwards;
+}
+@keyframes spark {
+  from {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(0) scale(1.4);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(calc(-1 * var(--d))) scale(0.3);
+  }
+}
+
+/* An item travelling between the room and the inventory. */
+.flight {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  height: 56px;
+  width: 56px;
+  margin: -28px 0 0 -28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 30px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle, rgb(252 211 77 / 0.45), rgb(252 211 77 / 0) 70%);
+  filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.6));
+  will-change: transform, opacity;
+}
+.item-land {
+  animation: item-land 520ms var(--ease-back) 950ms backwards;
+}
+@keyframes item-land {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    box-shadow: 0 0 0 6px rgb(252 211 77 / 0.35);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(252 211 77 / 0);
+  }
+}
+
+/* Narration and progress. */
+.msg-in {
+  display: inline-block;
+  animation: msg-in 260ms var(--ease-out);
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.pip {
+  height: 6px;
+  width: 18px;
+  border-radius: 9999px;
+  background: #44403c;
+  transition: background-color 300ms;
+}
+.pip-on {
+  background: #6ee7b7;
+  animation: pip-pop 500ms var(--ease-back);
+}
+@keyframes pip-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.5, 2.2);
+    box-shadow: 0 0 12px #6ee7b7;
+  }
+}
+
+/* The way out opens. */
+.exit-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--x) var(--y), #fffbeb 0%, #fde68a 18%, rgb(253 230 138 / 0) 60%);
+  transform-origin: var(--x) var(--y);
+  animation: exit-flash 1100ms ease-in forwards;
+}
+@keyframes exit-flash {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(6);
+  }
+}
+
+/* Screens whose lines arrive one after another. */
+.reveal-group > * {
+  animation: rise 600ms var(--ease-out) both;
+}
+.reveal-group > :nth-child(2) {
+  animation-delay: 90ms;
+}
+.reveal-group > :nth-child(3) {
+  animation-delay: 200ms;
+}
+.reveal-group > :nth-child(4) {
+  animation-delay: 320ms;
+}
+.reveal-group > :nth-child(5) {
+  animation-delay: 440ms;
+}
+.reveal-group > :nth-child(n + 6) {
+  animation-delay: 560ms;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+/* Lock dialog. */
+.backdrop-in {
+  animation: fade-in 200ms ease-out;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.modal-in {
+  animation: modal-in 320ms var(--ease-back);
+}
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+}
+.cell-pop {
+  animation: cell-pop 220ms var(--ease-back);
+}
+@keyframes cell-pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+}
+.dial-flip {
+  animation: dial-flip 260ms var(--ease-out);
+}
+@keyframes dial-flip {
+  from {
+    transform: translateY(-60%);
+    opacity: 0;
+  }
+}
+.lock-open {
+  animation: lock-open 600ms var(--ease-back) forwards;
+}
+@keyframes lock-open {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.04);
+    box-shadow:
+      0 0 0 3px #6ee7b7,
+      0 0 60px rgb(110 231 183 / 0.5);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px #6ee7b7,
+      0 0 30px rgb(110 231 183 / 0.25);
+  }
+}
+.cell-open {
+  animation: cell-open 420ms var(--ease-back) both;
+  animation-delay: calc(var(--i) * 60ms);
+}
+@keyframes cell-open {
+  40% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Win screen. */
+.confetti {
+  position: fixed;
+  top: -12px;
+  left: var(--x);
+  z-index: 30;
+  height: 12px;
+  width: 7px;
+  border-radius: 2px;
+  background: var(--c);
+  pointer-events: none;
+  opacity: 0;
+  animation: confetti var(--t) linear var(--delay) 1 forwards;
+}
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin));
+  }
+}
+
+/* Loading: a dark room, a door, and a torch looking for it. */
+.loader-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: loader-draw 900ms var(--ease-out) forwards;
+  animation-delay: calc(var(--i) * 110ms);
+}
+@keyframes loader-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.loader-torch {
+  animation: loader-torch 3.6s ease-in-out infinite;
+}
+@keyframes loader-torch {
+  0%,
+  100% {
+    transform: translate(-58px, 14px);
+  }
+  30% {
+    transform: translate(52px, -22px);
+  }
+  55% {
+    transform: translate(10px, 26px);
+  }
+  78% {
+    transform: translate(0, 4px);
+  }
+}
+.loader-keyhole {
+  animation: loader-keyhole 1.8s ease-in-out infinite;
+}
+@keyframes loader-keyhole {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.loader-dots::after {
+  content: "";
+  animation: loader-dots 1.4s steps(1) infinite;
+}
+@keyframes loader-dots {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
+  }
+}
+.log-in {
+  animation: msg-in 300ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-from-right,
+  .wall-from-left,
+  .lights-on,
+  .item-land,
+  .msg-in,
+  .pip-on,
+  .reveal-group > *,
+  .backdrop-in,
+  .modal-in,
+  .cell-pop,
+  .dial-flip,
+  .lock-open,
+  .cell-open,
+  .loader-line,
+  .loader-torch,
+  .loader-keyhole,
+  .log-in {
+    animation: none;
+  }
+  .fx,
+  .spark,
+  .confetti,
+  .exit-flash,
+  .flight {
+    display: none;
+  }
+  .loader-line {
+    stroke-dashoffset: 0;
+  }
+}

@@ -27,14 +27,16 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
   const [text, setText] = useState("");
   const [dials, setDials] = useState<number[]>(() => Array(length).fill(0));
   const [wrong, setWrong] = useState(false);
+  const [opened, setOpened] = useState(false);
 
   const answer = kind === "colors" ? dials.map((d) => LOCK_COLORS[d]).join(",") : text;
   const complete = kind === "colors" || text.length === length;
 
   async function submit() {
-    if (!complete) return;
+    if (!complete || opened) return;
     const ok = await onSubmit(answer);
-    if (!ok) {
+    if (ok) setOpened(true);
+    else {
       setWrong(true);
       setTimeout(() => setWrong(false), 500);
     }
@@ -57,7 +59,7 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
   }, [kind, length, onClose]);
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="backdrop-in fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
       <form
         role="dialog"
         aria-modal="true"
@@ -67,10 +69,12 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
           e.preventDefault();
           submit();
         }}
-        className={`w-full max-w-sm rounded-2xl bg-stone-900 p-6 shadow-2xl ring-1 ring-stone-700 ${wrong ? "shake" : ""}`}
+        className={`w-full max-w-sm rounded-2xl bg-stone-900 p-6 shadow-2xl ring-1 ring-stone-700 ${wrong ? "shake" : opened ? "lock-open" : "modal-in"}`}
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg font-semibold text-stone-50">{title}</h2>
+          <h2 className="text-lg font-semibold text-stone-50">
+            <span aria-hidden>{opened ? "🔓" : "🔒"}</span> {title}
+          </h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-2xl leading-none text-stone-400 hover:text-stone-100">
             ×
           </button>
@@ -82,9 +86,16 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
             {Array.from({ length }, (_, i) => (
               <span
                 key={i}
-                className="flex h-12 w-10 items-center justify-center rounded-lg bg-black font-mono text-2xl text-amber-300 ring-1 ring-stone-700"
+                style={{ "--i": i } as React.CSSProperties}
+                className={`flex h-12 w-10 items-center justify-center rounded-lg bg-black font-mono text-2xl ring-1 ${
+                  opened ? "cell-open text-emerald-300 ring-emerald-400" : "text-amber-300 ring-stone-700"
+                }`}
               >
-                {text[i] ?? ""}
+                {text[i] && (
+                  <span key={text[i]} className="cell-pop">
+                    {text[i]}
+                  </span>
+                )}
               </span>
             ))}
           </div>
@@ -129,21 +140,25 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
                   autoFocus={i === 0}
                   aria-label={`Dial ${i + 1}: ${name}. Press to change.`}
                   onClick={() => setDials((ds) => ds.map((v, j) => (j === i ? (v + 1) % LOCK_COLORS.length : v)))}
-                  className="flex h-20 w-16 flex-col items-center justify-center gap-1 rounded-xl ring-2 ring-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
-                  style={{ background: style.hex }}
+                  className={`flex h-20 w-16 items-center justify-center overflow-hidden rounded-xl ring-2 transition-[background-color,transform] duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${
+                    opened ? "cell-open ring-emerald-400" : "ring-stone-700"
+                  }`}
+                  style={{ background: style.hex, "--i": i } as React.CSSProperties}
                 >
+                  <span key={d} className="dial-flip flex flex-col items-center gap-1">
                   <span className="text-2xl text-black/70" aria-hidden>
                     {style.symbol}
                   </span>
                   <span className="text-[10px] font-semibold uppercase text-black/70">{name}</span>
+                  </span>
                 </button>
               );
             })}
           </div>
         )}
 
-        <p className="mt-3 h-5 text-center text-sm text-red-300" role="alert">
-          {wrong ? "Nothing happens." : ""}
+        <p className={`mt-3 h-5 text-center text-sm ${opened ? "text-emerald-300" : "text-red-300"}`} role="alert">
+          {opened ? "Click. It opens." : wrong ? "Nothing happens." : ""}
         </p>
         <button
           type="submit"
@@ -163,7 +178,7 @@ function Key({ children, onClick, label }: { children: React.ReactNode; onClick:
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="h-12 rounded-lg bg-stone-800 font-mono text-lg text-stone-100 hover:bg-stone-700 active:bg-stone-600"
+      className="h-12 rounded-lg bg-stone-800 font-mono text-lg text-stone-100 transition-transform duration-100 hover:bg-stone-700 active:scale-90 active:bg-stone-600"
     >
       {children}
     </button>

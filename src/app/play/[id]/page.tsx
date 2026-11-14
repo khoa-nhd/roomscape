@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { GameEngine } from "@/components/GameEngine";
+import { RoomLoader } from "@/components/RoomLoader";
 import { GameDraft } from "@/lib/game/schema";
 import { sealGame } from "@/lib/game/seal";
 import { verifyGame } from "@/lib/game/solver";
@@ -24,7 +25,7 @@ async function Room({ params }: { params: Promise<{ id: string }> }) {
 
 export default function PlayPage({ params }: PageProps<"/play/[id]">) {
   return (
-    <Suspense fallback={<p className="m-auto text-stone-400">Unlocking the room…</p>}>
+    <Suspense fallback={<RoomLoader label="Finding the room" className="m-auto" />}>
       <Room params={params} />
     </Suspense>
   );

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { AnalyzeEvent } from "@/app/api/analyze/route";
 import type { GenerateEvent } from "@/app/api/generate/route";
 import { GameEngine } from "@/components/GameEngine";
+import { RoomLoader } from "@/components/RoomLoader";
 import type { RoomAnalysis } from "@/lib/analysis/schema";
 import { WALL_IDS, type Game, type WallId } from "@/lib/game/schema";
 import { pixelate, type PreparedImage } from "@/lib/image";
@@ -155,12 +156,13 @@ export function CreateFlow() {
   if (phase.name === "working") {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-6 py-16">
+        <RoomLoader className="mb-8 self-start" />
         <p className="text-sm uppercase tracking-[0.3em] text-amber-300/80">Working</p>
         <h1 className="mt-3 text-3xl font-semibold text-stone-50">{phase.title}</h1>
         <p className="mt-2 text-stone-400">{phase.note}</p>
         <ol role="log" aria-live="polite" className="mt-8 space-y-2 font-mono text-sm">
           {phase.log.slice(-9).map((line, i, shown) => (
-            <li key={`${phase.log.length - shown.length + i}`} className={i === shown.length - 1 ? "text-amber-200" : "text-stone-500"}>
+            <li key={`${phase.log.length - shown.length + i}`} className={i === shown.length - 1 ? "log-in text-amber-200" : "text-stone-500"}>
               <span aria-hidden>{i === shown.length - 1 ? "▸ " : "✓ "}</span>
               {line}
             </li>

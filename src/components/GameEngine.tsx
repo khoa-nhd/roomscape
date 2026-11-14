@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Game, Hotspot, Puzzle } from "@/lib/game/schema";
 import { checkAnswer } from "@/lib/game/seal";
 import { nextPuzzle } from "@/lib/game/solver";
 import { formatTime } from "@/lib/format";
+import { centerOf, Confetti, CountUp, Flight, Sparks, type FlightSpec } from "./GameFx";
 import { Leaderboard } from "./Leaderboard";
 import { LockModal } from "./LockModal";
 
@@ -19,6 +20,12 @@ const WALL_NAMES = {
 const now = () => Date.now();
 
 type Phase = "intro" | "playing" | "won";
+
+/** A short effect drawn on one hotspot. `n` restarts it when the same hotspot is clicked again. */
+type Pulse = { id: string; kind: "look" | "denied" | "burst"; n: number };
+
+const hotspotSelector = (id: string) => `[data-hotspot="${id}"]`;
+const itemSelector = (id: string) => `[data-item="${id}"]`;
 
 type Props = {
   game: Game;
@@ -42,6 +49,15 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   const [hintLevels, setHintLevels] = useState<Record<string, number>>({});
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [turnClass, setTurnClass] = useState("wall-enter");
+  const [pulse, setPulse] = useState<Pulse | null>(null);
+  const [flights, setFlights] = useState<FlightSpec[]>([]);
+  /** Where the exit is on the wall, while the way out is opening. */
+  const [escaping, setEscaping] = useState<{ x: string; y: string } | null>(null);
+  const counter = useRef(0);
+  /** True while an item is in the air or the exit is opening, so clicks cannot double up. */
+  const busy = useRef(false);
+  const clockStopped = useRef(false);
 
   const wall = game.walls[wallIndex];
   const aspect = wall.aspect ?? 16 / 9;
@@ -58,13 +74,17 @@ export function GameEngine({ game, ranked, onExit }: Props) {
 
   useEffect(() => {
     if (phase !== "playing") return;
-    const t = setInterval(() => setElapsed(now() - startedAt), 250);
+    const t = setInterval(() => {
+      if (!clockStopped.current) setElapsed(now() - startedAt);
+    }, 250);
     return () => clearInterval(t);
   }, [phase, startedAt]);
 
   const turn = useCallback(
-    (delta: number) =>
-      setWallIndex((i) => (i + delta + game.walls.length) % game.walls.length),
+    (delta: number) => {
+      setTurnClass(delta > 0 ? "wall-from-right" : "wall-from-left");
+      setWallIndex((i) => (i + delta + game.walls.length) % game.walls.length);
+    },
     [game.walls.length],
   );
 
@@ -78,7 +98,28 @@ export function GameEngine({ game, ranked, onExit }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, openPuzzleId, turn]);
 
+  const endFlight = useCallback((key: number) => setFlights((f) => f.filter((x) => x.key !== key)), []);
+  const fx = (id: string, kind: Pulse["kind"]) => setPulse({ id, kind, n: ++counter.current });
+
   function solve(p: Puzzle) {
+    busy.current = false;
+    fx(p.hotspotId, "burst");
+    // Each reward rises out of the object, is held up for a beat, then drops into the inventory.
+    const from = centerOf(hotspotSelector(p.hotspotId));
+    const rewards = p.grants.items.filter((i) => !items.includes(i));
+    setFlights((f) => [
+      ...f,
+      ...rewards.map(
+        (id, i): FlightSpec => ({
+          key: ++counter.current,
+          icon: itemById.get(id)?.icon ?? "✨",
+          from,
+          to: itemSelector(id),
+          kind: "pickup",
+          delay: i * 180,
+        }),
+      ),
+    ]);
     setSolved((s) => [...s, p.id]);
     setItems((held) => [
       ...held,
@@ -95,13 +136,23 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         : p.solvedText,
     );
     if (p.id === game.exitPuzzleId) {
+      clockStopped.current = true;
+      busy.current = true;
       setElapsed(now() - startedAt);
-      setPhase("won");
+      const h = wall.hotspots.find((x) => x.id === p.hotspotId);
+      setEscaping(
+        h
+          ? { x: `${(h.bbox[0] + h.bbox[2] / 2) * 100}%`, y: `${(h.bbox[1] + h.bbox[3] / 2) * 100}%` }
+          : { x: "50%", y: "50%" },
+      );
+      setTimeout(() => setPhase("won"), 1100);
     }
   }
 
   function inspect(h: Hotspot) {
+    if (busy.current) return;
     const p = puzzleByHotspot.get(h.id);
+    fx(h.id, "look");
     if (!p) return setMessage(h.description);
     if (solved.includes(p.id))
       return setMessage(`${h.description} There is nothing more to find here.`);
@@ -109,7 +160,10 @@ export function GameEngine({ game, ranked, onExit }: Props) {
     const ready =
       p.requires.solved.every((id) => solved.includes(id)) &&
       p.requires.items.every((id) => items.includes(id));
-    if (!ready) return setMessage(`${h.description} ${p.blockedText}`);
+    if (!ready) {
+      fx(h.id, "denied");
+      return setMessage(`${h.description} ${p.blockedText}`);
+    }
 
     if (p.lock) {
       setMessage(h.description);
@@ -124,7 +178,21 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         `${h.description} ${p.clue} Select an item from your inventory, then try again.`,
       );
     }
-    solve(p);
+    // Using an item: it travels from the inventory to the object before anything happens.
+    const used = selectedItem && p.requires.items.includes(selectedItem) ? selectedItem : null;
+    if (!used) return solve(p);
+    busy.current = true;
+    setFlights((f) => [
+      ...f,
+      {
+        key: ++counter.current,
+        icon: itemById.get(used)?.icon ?? "✨",
+        from: centerOf(itemSelector(used)),
+        to: hotspotSelector(h.id),
+        kind: "use",
+      },
+    ]);
+    setTimeout(() => solve(p), 460);
   }
 
   async function askHint() {
@@ -151,6 +219,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   }
 
   function begin() {
+    clockStopped.current = false;
     setStartedAt(now());
     setElapsed(0);
     setPhase("playing");
@@ -175,7 +244,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         >
           Start the clock
         </button>
-        {ranked && <Leaderboard roomId={game.id} />}
+        <div className="w-full">{ranked && <Leaderboard roomId={game.id} />}</div>
       </Screen>
     );
   }
@@ -187,7 +256,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           You escaped
         </p>
         <h1 className="mt-3 font-mono text-6xl font-semibold text-stone-50">
-          {formatTime(elapsed)}
+          <CountUp ms={elapsed} />
         </h1>
         <p className="mt-2 text-stone-400">
           {hintsUsed === 0
@@ -209,6 +278,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         >
           {onExit ? "Back to your room" : "Play again"}
         </button>
+        <Confetti />
       </Screen>
     );
   }
@@ -223,6 +293,11 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           <p className="text-xs text-stone-400">
             {WALL_NAMES[wall.id]} · {solved.length}/{game.puzzles.length} solved
           </p>
+          <div className="mt-1.5 flex gap-1" aria-hidden>
+            {game.puzzles.map((p, i) => (
+              <span key={p.id} className={`pip ${i < solved.length ? "pip-on" : ""}`} />
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -247,12 +322,11 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         </div>
       </header>
 
-      <div className="relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
+      <div className="lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
         {/* On a narrow screen the wall keeps a useful height and the player swipes sideways to look along it. */}
         <div className="overflow-x-auto overscroll-x-contain">
           <div
-            key={wall.id}
-            className="wall-enter wall-frame relative mx-auto"
+            className="wall-frame relative mx-auto overflow-hidden"
             style={
               {
                 aspectRatio: aspect,
@@ -260,6 +334,8 @@ export function GameEngine({ game, ranked, onExit }: Props) {
               } as React.CSSProperties
             }
           >
+            {/* The moving layer sits inside a clipped frame, so sliding never adds scrollbars. */}
+            <div key={wall.id} className={`${turnClass} absolute inset-0`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={wall.imageUrl}
@@ -273,6 +349,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
                 <button
                   key={h.id}
                   onClick={() => inspect(h)}
+                  data-hotspot={h.id}
                   aria-label={h.label}
                   className={`hotspot group absolute rounded-md ${showObjects ? "hotspot-visible" : ""}`}
                   style={{
@@ -283,11 +360,21 @@ export function GameEngine({ game, ranked, onExit }: Props) {
                   }}
                 >
                   <span className="hotspot-label">{h.label}</span>
+                  {pulse?.id === h.id && (
+                    <span key={pulse.n} className={`fx fx-${pulse.kind}`} aria-hidden>
+                      {pulse.kind === "denied" && "🔒"}
+                    </span>
+                  )}
+                  {pulse?.id === h.id && pulse.kind === "burst" && <Sparks key={`s${pulse.n}`} />}
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
+        {escaping && (
+          <div className="exit-flash" style={{ "--x": escaping.x, "--y": escaping.y } as React.CSSProperties} />
+        )}
         <TurnButton side="left" onClick={() => turn(-1)} />
         <TurnButton side="right" onClick={() => turn(1)} />
       </div>
@@ -300,7 +387,9 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         aria-live="polite"
         className="min-h-[4.5rem] rounded-xl bg-stone-900 px-4 py-3 leading-relaxed text-stone-200 ring-1 ring-stone-800"
       >
-        {message}
+        <span key={message} className="msg-in">
+          {message}
+        </span>
       </p>
 
       <section
@@ -321,6 +410,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
             <button
               key={id}
               aria-pressed={active}
+              data-item={id}
               title={item.name}
               onClick={() => {
                 setSelectedItem(active ? null : id);
@@ -330,9 +420,9 @@ export function GameEngine({ game, ranked, onExit }: Props) {
                     : `${item.name}: ${item.description}`,
                 );
               }}
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              className={`item-land flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-transform active:scale-95 ${
                 active
-                  ? "border-amber-400 bg-amber-400/10 text-amber-200"
+                  ? "-translate-y-1 border-amber-400 bg-amber-400/10 text-amber-200 shadow-lg shadow-amber-500/20"
                   : "border-stone-700 text-stone-200 hover:bg-stone-800"
               }`}
             >
@@ -358,18 +448,23 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           onClose={() => setOpenPuzzleId(null)}
           onSubmit={async (answer) => {
             const ok = await checkAnswer(game, openPuzzle.id, answer);
-            if (ok) solve(openPuzzle);
+            // The lock shows itself opening before the dialog closes.
+            if (ok) setTimeout(() => solve(openPuzzle), 750);
             return ok;
           }}
         />
       )}
+
+      {flights.map((spec) => (
+        <Flight key={spec.key} spec={spec} onDone={endFlight} />
+      ))}
     </div>
   );
 }
 
 function Screen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-start justify-center px-6 py-16">
+    <div className="reveal-group mx-auto flex w-full max-w-2xl flex-1 flex-col items-start justify-center px-6 py-16">
       {children}
     </div>
   );
