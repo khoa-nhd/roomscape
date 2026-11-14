@@ -29,6 +29,21 @@ export async function readLocalImage(roomId: string, wall: string): Promise<Uint
   }
 }
 
+/** A locally stored scan is one file per room, whatever its format. */
+const scanPath = (roomId: string) => path.join(ROOT, "scans", roomId);
+
+export async function writeLocalScan(roomId: string, bytes: Uint8Array) {
+  await write(path.join("scans", roomId), bytes);
+}
+
+export async function readLocalScan(roomId: string): Promise<Uint8Array | null> {
+  try {
+    return await readFile(scanPath(roomId));
+  } catch {
+    return null;
+  }
+}
+
 export function localStore(): Store {
   return {
     putRoom: (record) => write(`rooms/${record.draft.id}.json`, JSON.stringify(record)),
@@ -36,6 +51,10 @@ export function localStore(): Store {
     async putImage(roomId, wall, jpeg) {
       await write(`images/${roomId}/${wall}.jpg`, jpeg);
       return `/api/rooms/${roomId}/image/${wall}`;
+    },
+    async scanUpload(roomId) {
+      const url = `/api/rooms/${roomId}/scan`;
+      return { uploadUrl: url, headers: { "content-type": "application/octet-stream" }, publicUrl: url };
     },
     async addRun(roomId, run) {
       const runs = (await readJson<Run[]>(`runs/${roomId}.json`)) ?? [];

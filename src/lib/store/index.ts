@@ -16,10 +16,18 @@ export interface Store {
   getRoom(id: string): Promise<RoomRecord | null>;
   /** Stores a wall photo and returns the URL players load it from. */
   putImage(roomId: string, wall: WallId, jpeg: Uint8Array): Promise<string>;
+  /**
+   * Where the browser should PUT a room's 3D scan, and where players will load it from.
+   * A scan is tens of megabytes, so it goes straight to storage and never through the app server.
+   */
+  scanUpload(roomId: string, format: ScanFormat): Promise<ScanTicket>;
   addRun(roomId: string, run: Run): Promise<void>;
   /** Fastest first; fewer hints breaks ties. */
   topRuns(roomId: string, limit: number): Promise<Run[]>;
 }
+
+export type ScanFormat = "spz" | "ply";
+export type ScanTicket = { uploadUrl: string; headers: Record<string, string>; publicUrl: string };
 
 export const ROOM_ID = /^r-[a-f0-9]{8}$/;
 

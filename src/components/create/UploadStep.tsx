@@ -11,10 +11,11 @@ type Props = {
   photos: Partial<WallPhotos>;
   onChange: (photos: Partial<WallPhotos>) => void;
   onScan: (photos: WallPhotos) => void;
+  onUseScan: () => void;
   error?: string;
 };
 
-export function UploadStep({ photos, onChange, onScan, error }: Props) {
+export function UploadStep({ photos, onChange, onScan, onUseScan, error }: Props) {
   const [busy, setBusy] = useState<WallId | null>(null);
   const [localError, setLocalError] = useState("");
   const ready = WALL_IDS.every((id) => photos[id]);
@@ -91,6 +92,20 @@ export function UploadStep({ photos, onChange, onScan, error }: Props) {
       >
         Scan my room
       </button>
+
+      <div className="mt-10 rounded-xl bg-stone-900 p-4 ring-1 ring-stone-800">
+        <p className="font-medium text-stone-100">Want players to walk around your room?</p>
+        <p className="mt-1 text-sm leading-relaxed text-stone-400">
+          Scan it in 3D with a free phone app and upload the file. The game then plays in first person, inside the
+          real room.
+        </p>
+        <button
+          onClick={onUseScan}
+          className="mt-3 rounded-full border border-amber-400/70 px-5 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-400/10"
+        >
+          Use a 3D scan
+        </button>
+      </div>
     </main>
   );
 }

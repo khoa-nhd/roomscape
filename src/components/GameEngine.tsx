@@ -8,6 +8,7 @@ import { formatTime } from "@/lib/format";
 import { centerOf, Confetti, CountUp, Flight, Sparks, type FlightSpec } from "./GameFx";
 import { Leaderboard } from "./Leaderboard";
 import { LockModal } from "./LockModal";
+import { Room3D } from "./Room3D";
 
 const WALL_NAMES = {
   N: "North wall",
@@ -54,6 +55,16 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   const [flights, setFlights] = useState<FlightSpec[]>([]);
   /** Where the exit is on the wall, while the way out is opening. */
   const [escaping, setEscaping] = useState<{ x: string; y: string } | null>(null);
+  /** Rooms made from a scan open in 3D; the player can switch to the photo view, and it is the fallback. */
+  const [view3d, setView3d] = useState(Boolean(game.scene));
+  const anchors = useMemo(
+    () =>
+      game.walls.flatMap((w) =>
+        w.hotspots.flatMap((h) => (h.pos ? [{ id: h.id, label: h.label, pos: h.pos }] : [])),
+      ),
+    [game],
+  );
+  const in3d = Boolean(game.scene) && view3d && anchors.length > 0;
   const counter = useRef(0);
   /** True while an item is in the air or the exit is opening, so clicks cannot double up. */
   const busy = useRef(false);
@@ -89,14 +100,14 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   );
 
   useEffect(() => {
-    if (phase !== "playing" || openPuzzleId) return;
+    if (phase !== "playing" || openPuzzleId || in3d) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") turn(-1);
       if (e.key === "ArrowRight") turn(1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, openPuzzleId, turn]);
+  }, [phase, openPuzzleId, turn, in3d]);
 
   const endFlight = useCallback((key: number) => setFlights((f) => f.filter((x) => x.key !== key)), []);
   const fx = (id: string, kind: Pulse["kind"]) => setPulse({ id, kind, n: ++counter.current });
@@ -139,7 +150,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
       clockStopped.current = true;
       busy.current = true;
       setElapsed(now() - startedAt);
-      const h = wall.hotspots.find((x) => x.id === p.hotspotId);
+      const h = in3d ? undefined : wall.hotspots.find((x) => x.id === p.hotspotId);
       setEscaping(
         h
           ? { x: `${(h.bbox[0] + h.bbox[2] / 2) * 100}%`, y: `${(h.bbox[1] + h.bbox[3] / 2) * 100}%` }
@@ -291,7 +302,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
             {game.title}
           </p>
           <p className="text-xs text-stone-400">
-            {WALL_NAMES[wall.id]} · {solved.length}/{game.puzzles.length} solved
+            {in3d ? "Free roam" : WALL_NAMES[wall.id]} · {solved.length}/{game.puzzles.length} solved
           </p>
           <div className="mt-1.5 flex gap-1" aria-hidden>
             {game.puzzles.map((p, i) => (
@@ -307,6 +318,22 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           >
             {showObjects ? "Hide" : "Show"} objects
           </button>
+          {onExit && (
+            <button
+              onClick={onExit}
+              className="whitespace-nowrap rounded-full border border-stone-700 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800"
+            >
+              End test
+            </button>
+          )}
+          {game.scene && (
+            <button
+              onClick={() => setView3d((v) => !v)}
+              className="whitespace-nowrap rounded-full border border-stone-700 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800"
+            >
+              {in3d ? "Photo view" : "3D view"}
+            </button>
+          )}
           <button
             onClick={askHint}
             className="rounded-full border border-stone-700 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800"
@@ -323,8 +350,24 @@ export function GameEngine({ game, ranked, onExit }: Props) {
       </header>
 
       <div className="lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
+        {in3d && game.scene && (
+          <Room3D
+            scene={game.scene}
+            anchors={anchors}
+            showObjects={showObjects}
+            paused={Boolean(openPuzzleId) || Boolean(escaping)}
+            onInspect={(id) => {
+              const h = game.walls.flatMap((w) => w.hotspots).find((x) => x.id === id);
+              if (h) inspect(h);
+            }}
+            onFail={() => {
+              setView3d(false);
+              setMessage("This device could not show the 3D room, so here are the photos instead.");
+            }}
+          />
+        )}
         {/* On a narrow screen the wall keeps a useful height and the player swipes sideways to look along it. */}
-        <div className="overflow-x-auto overscroll-x-contain">
+        <div className={in3d ? "hidden" : "overflow-x-auto overscroll-x-contain"}>
           <div
             className="wall-frame relative mx-auto overflow-hidden"
             style={
@@ -375,10 +418,10 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         {escaping && (
           <div className="exit-flash" style={{ "--x": escaping.x, "--y": escaping.y } as React.CSSProperties} />
         )}
-        <TurnButton side="left" onClick={() => turn(-1)} />
-        <TurnButton side="right" onClick={() => turn(1)} />
+        {!in3d && <TurnButton side="left" onClick={() => turn(-1)} />}
+        {!in3d && <TurnButton side="right" onClick={() => turn(1)} />}
       </div>
-      <p className="-mt-1 text-center text-xs text-stone-500 sm:hidden">
+      <p className={in3d ? "hidden" : "-mt-1 text-center text-xs text-stone-500 sm:hidden"}>
         Swipe the photo sideways to see the whole wall.
       </p>
 
@@ -439,7 +482,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         <LockModal
           key={openPuzzle.id}
           title={
-            wall.hotspots.find((h) => h.id === openPuzzle.hotspotId)?.label ??
+            game.walls.flatMap((w) => w.hotspots).find((h) => h.id === openPuzzle.hotspotId)?.label ??
             "Lock"
           }
           clue={openPuzzle.clue}

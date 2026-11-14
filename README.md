@@ -15,6 +15,16 @@ Built for IceHacks 2026.
 4. **The AI proposes, the solver decides.** The model designs a puzzle chain and writes the story. Code then builds the game, and a solver checks it. A rejected design goes back to the model with the solver's complaints. If the model keeps failing, a chain built by plain code is used, so the creator always gets a playable room.
 5. **Share and race.** Publishing uploads the photos (with marked areas pixelated on the device first) and gives a link. Players escape in the browser and post their time to the room's leaderboard.
 
+### Walk-around mode (3D scan)
+
+Instead of four photos, the creator can upload a 3D scan of the room (Gaussian splats, `.spz` or `.ply`, from a free phone app such as Scaniverse).
+
+1. The scan opens in the browser. The creator stands in the middle of the room and faces a wall.
+2. The app photographs four views from that spot, out of the scan itself. Those four pictures go through the same pipeline as above, so the AI, the director screen and the solver are unchanged.
+3. Each object the AI boxed is placed in 3D: the splats seen inside its box vote on how far away it is.
+4. On publish the scan is shrunk in the browser (cropped to the room, faint splats and view-dependent colour dropped, written as `.spz`) and uploaded straight to storage with a signed URL. A 12 MB test scan became 0.7 MB.
+5. Players walk the room in first person (W A S D and mouse, or touch), and can only inspect what they are close to and looking at. The four pictures remain as a photo view, which is also the fallback for devices that cannot draw the scan.
+
 ## Why it can be trusted
 
 The model is never trusted with anything that would break the game.
@@ -55,6 +65,7 @@ src/
     game/schema.ts                the Game JSON contract (Zod)
     game/solver.ts                solvability and necessity checks
     game/seal.ts                  answer hashing
+    three/                        3D scan: viewer and controls, object placement, shrinking before upload
     store/                        Supabase in production, files in .data/ for local development
     image.ts                      client-side resize, metadata removal, pixelation
 ```
@@ -101,7 +112,7 @@ npm run build
 
 ## Built with
 
-Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zod, Google Gemini API, Supabase (Postgres and Storage).
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zod, three.js, Spark (Gaussian splat renderer), Google Gemini API, Supabase (Postgres and Storage).
 
 ## AI disclosure
 

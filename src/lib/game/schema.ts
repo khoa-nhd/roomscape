@@ -28,6 +28,7 @@ export type Template = z.infer<typeof Template>;
 
 const Id = z.string().regex(/^[a-z0-9_]+$/, "ids are lowercase snake_case");
 const Unit = z.number().min(0).max(1);
+const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
 
 export const Hotspot = z.object({
   id: Id,
@@ -36,6 +37,8 @@ export const Hotspot = z.object({
   bbox: z.tuple([Unit, Unit, Unit, Unit]),
   /** Narration shown when the player looks at it. */
   description: z.string().min(1),
+  /** Where the object is in the 3D scan, in metres. Only for rooms made from a scan. */
+  pos: Vec3.optional(),
 });
 export type Hotspot = z.infer<typeof Hotspot>;
 
@@ -97,6 +100,24 @@ export const Puzzle = PuzzleBase.extend({
 });
 export type Puzzle = z.infer<typeof Puzzle>;
 
+/**
+ * A 3D scan of the room (Gaussian splats) that the player can walk around in.
+ * The room frame has its origin at the creator's chosen centre, `v` pointing at the first wall and `u` to its right.
+ */
+export const Scene3D = z.object({
+  url: z.string().min(1),
+  format: z.enum(["spz", "ply"]),
+  /** The file is upside down relative to the viewer and has to be turned over. */
+  flip: z.boolean(),
+  /** Eye position at the centre of the room. */
+  origin: Vec3,
+  /** Heading, in radians, when facing the first wall. */
+  yaw: z.number(),
+  /** Walkable area in the room frame. */
+  bounds: z.object({ minU: z.number(), maxU: z.number(), minV: z.number(), maxV: z.number() }),
+});
+export type Scene3D = z.infer<typeof Scene3D>;
+
 const GameBase = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   title: z.string().min(1),
@@ -107,6 +128,7 @@ const GameBase = z.object({
   walls: z.array(Wall).length(4),
   items: z.array(Item),
   exitPuzzleId: Id,
+  scene: Scene3D.optional(),
 });
 
 export const GameDraft = GameBase.extend({ puzzles: z.array(DraftPuzzle).min(1) });

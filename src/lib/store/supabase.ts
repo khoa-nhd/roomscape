@@ -43,6 +43,21 @@ export function supabaseStore(): Store {
       });
       return `${base}/storage/v1/object/public/${BUCKET}/${object}`;
     },
+    async scanUpload(roomId, format) {
+      const object = `${roomId}/scan.${format}`;
+      // A signed URL for this one object: the browser can upload it and nothing else.
+      const res = await call(`/storage/v1/object/upload/sign/${BUCKET}/${object}`, {
+        method: "POST",
+        headers: { ...json, "x-upsert": "true" },
+        body: "{}",
+      });
+      const { url } = (await res.json()) as { url: string };
+      return {
+        uploadUrl: `${base}/storage/v1${url}`,
+        headers: { "content-type": "application/octet-stream", "cache-control": "max-age=31536000", "x-upsert": "true" },
+        publicUrl: `${base}/storage/v1/object/public/${BUCKET}/${object}`,
+      };
+    },
     async addRun(roomId, run) {
       await call("/rest/v1/runs", {
         method: "POST",
