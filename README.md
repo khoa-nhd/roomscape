@@ -4,7 +4,7 @@
 
 Built for IceHacks 2026.
 
-- Live app: _add the URL after deploying_
+- Live app: https://roomscape-khoanhd.vercel.app
 - Demo video: _add the link_
 
 ## How it works
