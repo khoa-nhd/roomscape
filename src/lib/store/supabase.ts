@@ -9,7 +9,8 @@ import type { RoomRecord, Run, Store } from "./index";
 const BUCKET = "rooms";
 
 export function supabaseStore(): Store {
-  const base = process.env.SUPABASE_URL!.replace(/\/$/, "");
+  // Only the origin is used, so a pasted "…supabase.co/rest/v1/" still works.
+  const base = new URL(process.env.SUPABASE_URL!.trim()).origin;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const auth = { apikey: key, authorization: `Bearer ${key}` };
 
