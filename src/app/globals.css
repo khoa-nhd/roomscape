@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: #0c0a09;
+  color: #e7e5e4;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Hotspots are invisible until hovered, focused, or "Show objects" is on. */
+.hotspot {
+  cursor: pointer;
+  outline: 2px solid transparent;
+  transition: outline-color 120ms, background-color 120ms;
+}
+.hotspot:hover,
+.hotspot:focus-visible,
+.hotspot-visible {
+  outline-color: rgb(252 211 77 / 0.9);
+  background-color: rgb(252 211 77 / 0.12);
+}
+.hotspot-label {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translate(-50%, -4px);
+  white-space: nowrap;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.8);
+  padding: 2px 10px;
+  font-size: 12px;
+  color: #fde68a;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+}
+.hotspot:hover .hotspot-label,
+.hotspot:focus-visible .hotspot-label,
+.hotspot-visible .hotspot-label {
+  opacity: 1;
+}
+
+.wall-enter {
+  animation: wall-enter 260ms ease-out;
+}
+@keyframes wall-enter {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+.shake {
+  animation: shake 400ms;
+}
+@keyframes shake {
+  20%,
+  60% {
+    transform: translateX(-8px);
+  }
+  40%,
+  80% {
+    transform: translateX(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-enter,
+  .shake {
+    animation: none;
+  }
+}
+
+/* Wall photo: fits the screen on desktop. On a phone held upright it is wider than the screen and scrolls sideways. */
+.wall-frame {
+  width: min(100%, calc(70vh * var(--wall-aspect)));
+}
+@media (max-width: 640px) and (orientation: portrait) {
+  .wall-frame {
+    width: max(100%, calc(46vh * var(--wall-aspect)));
+  }
+}
