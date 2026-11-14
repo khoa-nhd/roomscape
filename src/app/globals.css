@@ -571,6 +571,22 @@ body {
     opacity: 1;
   }
 }
+/* Horror, photo view: the room is dark and a torch beam follows the pointer. */
+.torch {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(
+    circle 190px at var(--tx, 50%) var(--ty, 45%),
+    rgb(0 0 0 / 0) 0%,
+    rgb(0 0 0 / 0.25) 45%,
+    rgb(2 0 0 / 0.93) 100%
+  );
+}
+.theme-horror .room-view > .torch {
+  filter: none;
+}
 .theme-scifi .room-view > :not(.exit-flash):not(button) {
   filter: saturate(0.8) hue-rotate(168deg) brightness(0.95) contrast(1.08);
 }

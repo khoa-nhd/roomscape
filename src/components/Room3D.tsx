@@ -9,6 +9,8 @@ type Props = {
   scene: Scene3D;
   anchors: Anchor[];
   showObjects: boolean;
+  /** Lights out: the player sees by torch. */
+  dark: boolean;
   /** A dialog is open or the game is between states: the room ignores input. */
   paused: boolean;
   onInspect: (hotspotId: string) => void;
@@ -17,7 +19,7 @@ type Props = {
 };
 
 /** The scanned room, walked through in first person. Objects come into reach as the player nears them. */
-export function Room3D({ scene, anchors, showObjects, paused, onInspect, onFail }: Props) {
+export function Room3D({ scene, anchors, showObjects, dark, paused, onInspect, onFail }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<Stage | null>(null);
   const [progress, setProgress] = useState<number | null>(0);
@@ -65,6 +67,7 @@ export function Room3D({ scene, anchors, showObjects, paused, onInspect, onFail 
 
   useEffect(() => stage.current?.setAnchors(anchors), [anchors, progress]);
   useEffect(() => stage.current?.setShowAll(showObjects), [showObjects, progress]);
+  useEffect(() => stage.current?.setTorch(dark), [dark, progress]);
   useEffect(() => {
     const s = stage.current;
     if (!s) return;

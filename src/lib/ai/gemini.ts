@@ -33,7 +33,18 @@ type Options = {
   /** Called with the full text so far each time more of the reply arrives. */
   onPartial?: (textSoFar: string) => void;
   signal?: AbortSignal;
+  /** A key supplied by the person making the room. Used instead of the server's own key, and never stored or logged. */
+  apiKey?: string;
 };
+
+/** Header a creator's own key travels in. */
+export const USER_KEY_HEADER = "x-gemini-key";
+
+/** The creator's own key from a request, if it looks like one. */
+export function userKey(request: Request): string | undefined {
+  const value = request.headers.get(USER_KEY_HEADER)?.trim();
+  return value && /^[A-Za-z0-9_-]{20,120}$/.test(value) ? value : undefined;
+}
 
 /**
  * Start the request on the first model. Whenever the current model fails, or
@@ -103,8 +114,8 @@ function openStream(models: string[], key: string, body: string, signal?: AbortS
 }
 
 /** Ask the model for JSON and stream the reply. Returns the parsed object. */
-export async function generateJson({ parts, schema, temperature = 0.2, onPartial, signal }: Options): Promise<unknown> {
-  const key = process.env.GEMINI_API_KEY;
+export async function generateJson({ parts, schema, temperature = 0.2, onPartial, signal, apiKey }: Options): Promise<unknown> {
+  const key = apiKey || process.env.GEMINI_API_KEY;
   if (!key) throw new AiError("GEMINI_API_KEY is not set.", 500);
   const models = (process.env.GEMINI_MODEL || DEFAULT_MODELS)
     .split(",")

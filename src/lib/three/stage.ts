@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+import { SparkRenderer, SplatEdit, SplatEditRgbaBlendMode, SplatEditSdf, SplatEditSdfType, SplatMesh } from "@sparkjsdev/spark";
 import { CAPTURE_ASPECT, CAPTURE_VFOV, clampToBounds, wallYaw, type Bounds, type Frame, type Vec3 } from "./geometry";
 import type { WallId } from "../game/schema";
 
@@ -53,6 +53,8 @@ export class Stage {
   private touches = new Map<number, { kind: "move" | "look"; x: number; y: number; sx: number; sy: number }>();
   private drag: { x: number; y: number; moved: number } | null = null;
   private bob = 0;
+  /** Dark room: everything outside the torch beam is dimmed. */
+  private torch: { edit: SplatEdit; beam: SplatEditSdf } | null = null;
 
   constructor(
     private host: HTMLElement,
@@ -177,6 +179,25 @@ export class Stage {
     }
   }
 
+  /**
+   * Turns the lights out and gives the player a torch: the scan is dimmed everywhere
+   * except inside a cone that follows where they look.
+   */
+  setTorch(on: boolean) {
+    if (!on) {
+      if (this.torch) this.scene.remove(this.torch.edit);
+      this.torch = null;
+      return;
+    }
+    if (this.torch) return;
+    const beam = new SplatEditSdf({ type: SplatEditSdfType.INFINITE_CONE, radius: 0.6, color: new THREE.Color(0.1, 0.1, 0.14), opacity: 1 });
+    // Inverted: the edit applies outside the cone. A soft edge gives the beam a falloff.
+    const edit = new SplatEdit({ rgbaBlendMode: SplatEditRgbaBlendMode.MULTIPLY, invert: true, softEdge: 0.45 });
+    edit.add(beam);
+    this.scene.add(edit);
+    this.torch = { edit, beam };
+  }
+
   setShowAll(show: boolean) {
     this.showAll = show;
   }
@@ -259,6 +280,13 @@ export class Stage {
     if (!this.paused) this.move(dt);
     this.applyPose();
     this.updateFocus();
+    if (this.torch) {
+      // The cone starts a little behind the eye, so things right in front are lit too.
+      const back = new THREE.Vector3();
+      this.camera.getWorldDirection(back).multiplyScalar(-0.35);
+      this.torch.beam.position.copy(this.camera.position).add(back);
+      this.torch.beam.quaternion.copy(this.camera.quaternion);
+    }
     this.renderer.render(this.scene, this.camera);
   }
 

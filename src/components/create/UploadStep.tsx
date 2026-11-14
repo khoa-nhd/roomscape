@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { WALL_IDS, type WallId } from "@/lib/game/schema";
 import { prepareImage } from "@/lib/image";
-import type { WallPhotos } from "./CreateFlow";
+import { OWN_KEY_STORAGE, type WallPhotos } from "./CreateFlow";
 
 const WALL_LABELS: Record<WallId, string> = { N: "Wall 1", E: "Wall 2", S: "Wall 3", W: "Wall 4" };
 
@@ -93,7 +93,9 @@ export function UploadStep({ photos, onChange, onScan, onUseScan, error }: Props
         Scan my room
       </button>
 
-      <div className="mt-10 rounded-xl bg-stone-900 p-4 ring-1 ring-stone-800">
+      <OwnKey />
+
+      <div className="mt-4 rounded-xl bg-stone-900 p-4 ring-1 ring-stone-800">
         <p className="font-medium text-stone-100">Want players to walk around your room?</p>
         <p className="mt-1 text-sm leading-relaxed text-stone-400">
           Scan it in 3D with a free phone app and upload the file. The game then plays in first person, inside the
@@ -107,5 +109,69 @@ export function UploadStep({ photos, onChange, onScan, onUseScan, error }: Props
         </button>
       </div>
     </main>
+  );
+}
+
+/** Lets a creator use their own free Gemini key, so room making does not depend on the shared daily quota. */
+function OwnKey() {
+  const [saved, setSaved] = useState(false);
+  const [value, setValue] = useState("");
+
+  return (
+    <details
+      className="mt-10 rounded-xl bg-stone-900 p-4 ring-1 ring-stone-800"
+      onToggle={() => {
+        try {
+          setSaved(Boolean(window.localStorage.getItem(OWN_KEY_STORAGE)));
+        } catch {}
+      }}
+    >
+      <summary className="cursor-pointer font-medium text-stone-100">Scan failing or busy? Use your own free AI key</summary>
+      <p className="mt-2 text-sm leading-relaxed text-stone-400">
+        This site shares one free Gemini quota between everyone, and it runs out. A key from Google AI Studio is free
+        and gives you your own. It is saved only in this browser and sent only with your scan requests.
+      </p>
+      <form
+        className="mt-3 flex flex-wrap gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          try {
+            if (value.trim()) window.localStorage.setItem(OWN_KEY_STORAGE, value.trim());
+            setSaved(Boolean(value.trim()) || saved);
+            setValue("");
+          } catch {}
+        }}
+      >
+        <input
+          type="password"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          aria-label="Gemini API key"
+          placeholder={saved ? "A key is saved. Paste another to replace it." : "Paste your Gemini API key"}
+          className="min-w-0 flex-1 rounded-lg border border-stone-700 bg-stone-950 px-3 py-2 text-sm text-stone-100 placeholder:text-stone-600 focus-visible:outline-2 focus-visible:outline-amber-300"
+        />
+        <button type="submit" disabled={!value.trim()} className="rounded-full bg-amber-400 px-5 py-2 text-sm font-semibold text-stone-950 hover:bg-amber-300 disabled:opacity-40">
+          Save
+        </button>
+        {saved && (
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                window.localStorage.removeItem(OWN_KEY_STORAGE);
+              } catch {}
+              setSaved(false);
+            }}
+            className="rounded-full border border-stone-700 px-5 py-2 text-sm text-stone-300 hover:bg-stone-800"
+          >
+            Remove saved key
+          </button>
+        )}
+      </form>
+      <p className="mt-2 text-sm text-stone-500" role="status">
+        {saved ? "Your own key is in use on this device." : "No key saved: the shared quota is used."}
+      </p>
+    </details>
   );
 }

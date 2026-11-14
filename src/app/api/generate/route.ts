@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AiError, generateJson } from "@/lib/ai/gemini";
+import { AiError, generateJson, userKey } from "@/lib/ai/gemini";
 import { RoomAnalysis } from "@/lib/analysis/schema";
 import type { Game, GameDraft } from "@/lib/game/schema";
 import { sealGame } from "@/lib/game/seal";
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
               schema: PROPOSAL_RESPONSE_SCHEMA,
               temperature: 0.8,
               signal: request.signal,
+              apiKey: userKey(request),
               onPartial(text) {
                 const count = (text.match(/"template"\s*:/g) ?? []).length;
                 for (let n = puzzlesSeen + 1; n <= count; n++) send({ type: "progress", message: `Writing puzzle ${n}…` });

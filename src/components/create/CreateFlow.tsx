@@ -45,6 +45,18 @@ function placeInScan(game: Game, scan: ScanResult, url: string): Game {
   };
 }
 
+export const OWN_KEY_STORAGE = "roomscape:gemini-key";
+
+/** The creator's own AI key, if they saved one on this device. It is sent with AI requests and kept nowhere else. */
+function ownKeyHeader(): Record<string, string> {
+  try {
+    const key = window.localStorage.getItem(OWN_KEY_STORAGE)?.trim();
+    return key ? { "x-gemini-key": key } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Read a newline-delimited JSON reply, one event at a time. */
 async function readEvents<E>(res: Response, onEvent: (event: E) => void) {
   if (!res.ok || !res.body) {
@@ -94,7 +106,7 @@ export function CreateFlow() {
 
     try {
       let analysis: RoomAnalysis | null = null;
-      const res = await fetch("/api/analyze", { method: "POST", body: form, signal: controller.signal });
+      const res = await fetch("/api/analyze", { method: "POST", body: form, headers: ownKeyHeader(), signal: controller.signal });
       await readEvents<AnalyzeEvent>(res, (event) => {
         if (event.type === "progress") log(event.message);
         else if (event.type === "result") analysis = event.analysis;
@@ -123,7 +135,7 @@ export function CreateFlow() {
       let built: Built | null = null;
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...ownKeyHeader() },
         body: JSON.stringify({
           analysis,
           settings,

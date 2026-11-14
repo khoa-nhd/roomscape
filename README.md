@@ -110,7 +110,8 @@ npm run build
 - The leaderboard trusts the time reported by the player's browser. It is a friendly board, not a tamper-proof one.
 - Lock answers are hashed, but a short code can be guessed by trying every combination.
 - Rate limiting is in memory per server instance.
-- The Gemini free tier allows a small number of requests per day per model, so room creation can be temporarily unavailable. The rooms on the home page always work.
+- The Gemini free tier allows a small number of requests per day per model, so room creation can be temporarily unavailable. The rooms on the home page always work. A creator can also paste their own free Gemini key on the upload screen; it is kept in their browser and sent only with their own scan requests.
+- A 3D scan cannot be blurred, and real objects inside it cannot open or move.
 
 ## Built with
 

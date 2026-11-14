@@ -1,4 +1,4 @@
-import { AiError, type AiPart, generateJson } from "@/lib/ai/gemini";
+import { AiError, type AiPart, generateJson, userKey } from "@/lib/ai/gemini";
 import { ANALYSIS_PROMPT } from "@/lib/analysis/prompt";
 import { ANALYSIS_RESPONSE_SCHEMA, normalizeAnalysis, type RoomAnalysis } from "@/lib/analysis/schema";
 import { WALL_IDS } from "@/lib/game/schema";
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
           parts,
           schema: ANALYSIS_RESPONSE_SCHEMA,
           signal: request.signal,
+          apiKey: userKey(request),
           onPartial(text) {
             const walls = [...text.matchAll(/"wall"\s*:\s*"([NESW])"/g)];
             const labels = [...text.matchAll(/"label"\s*:\s*"([^"]+)"/g)];

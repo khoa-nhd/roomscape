@@ -319,8 +319,8 @@ export function GameEngine({ game, ranked, onExit }: Props) {
 
   return (
     <div className={`theme-${game.theme} mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 px-3 py-4 sm:px-6`}>
-      <header className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-40">
           <p className="truncate text-sm font-medium text-stone-100">
             {game.title}
           </p>
@@ -333,7 +333,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={() => setShowObjects((v) => !v)}
             aria-pressed={showObjects}
@@ -386,12 +386,21 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         </div>
       </header>
 
-      <div className="room-view lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
+      <div
+        className="room-view lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800"
+        onPointerMove={(e) => {
+          // The torch in a dark room follows the pointer (or the last touch).
+          const box = e.currentTarget.getBoundingClientRect();
+          e.currentTarget.style.setProperty("--tx", `${e.clientX - box.left}px`);
+          e.currentTarget.style.setProperty("--ty", `${e.clientY - box.top}px`);
+        }}
+      >
         {in3d && game.scene && (
           <Room3D
             scene={game.scene}
             anchors={anchors}
             showObjects={showObjects}
+            dark={game.theme === "horror"}
             paused={Boolean(openPuzzleId) || Boolean(escaping) || reveal.length > 0}
             onInspect={(id) => {
               const h = game.walls.flatMap((w) => w.hotspots).find((x) => x.id === id);
@@ -452,6 +461,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
             </div>
           </div>
         </div>
+        {game.theme === "horror" && !in3d && <div aria-hidden className="torch" />}
         {escaping && (
           <div className="exit-flash" style={{ "--x": escaping.x, "--y": escaping.y } as React.CSSProperties} />
         )}
