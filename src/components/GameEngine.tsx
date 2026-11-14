@@ -5,7 +5,9 @@ import type { Game, Hotspot, Puzzle } from "@/lib/game/schema";
 import { checkAnswer } from "@/lib/game/seal";
 import { nextPuzzle } from "@/lib/game/solver";
 import { formatTime } from "@/lib/format";
+import { isMuted, play, setMuted, startAmbience, stopAmbience, unlockAudio } from "@/lib/sound";
 import { centerOf, Confetti, CountUp, Flight, Sparks, type FlightSpec } from "./GameFx";
+import { ItemReveal } from "./ItemReveal";
 import { Leaderboard } from "./Leaderboard";
 import { LockModal } from "./LockModal";
 import { Room3D } from "./Room3D";
@@ -65,6 +67,9 @@ export function GameEngine({ game, ranked, onExit }: Props) {
     [game],
   );
   const in3d = Boolean(game.scene) && view3d && anchors.length > 0;
+  /** Items just found and not yet taken: each is shown to the player before it goes in the inventory. */
+  const [reveal, setReveal] = useState<string[]>([]);
+  const [muted, setMutedState] = useState(false);
   const counter = useRef(0);
   /** True while an item is in the air or the exit is opening, so clicks cannot double up. */
   const busy = useRef(false);
@@ -109,33 +114,26 @@ export function GameEngine({ game, ranked, onExit }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [phase, openPuzzleId, turn, in3d]);
 
+  // The room's background sound stops when the player leaves the page.
+  useEffect(() => stopAmbience, []);
+
   const endFlight = useCallback((key: number) => setFlights((f) => f.filter((x) => x.key !== key)), []);
   const fx = (id: string, kind: Pulse["kind"]) => setPulse({ id, kind, n: ++counter.current });
 
   function solve(p: Puzzle) {
     busy.current = false;
     fx(p.hotspotId, "burst");
-    // Each reward rises out of the object, is held up for a beat, then drops into the inventory.
-    const from = centerOf(hotspotSelector(p.hotspotId));
-    const rewards = p.grants.items.filter((i) => !items.includes(i));
-    setFlights((f) => [
-      ...f,
-      ...rewards.map(
-        (id, i): FlightSpec => ({
-          key: ++counter.current,
-          icon: itemById.get(id)?.icon ?? "✨",
-          from,
-          to: itemSelector(id),
-          kind: "pickup",
-          delay: i * 180,
-        }),
-      ),
-    ]);
+    play("unlock");
+    // Rewards are held up for the player first; they reach the inventory when taken (see takeItem).
+    const rewards = p.grants.items.filter((i) => !items.includes(i) && itemById.has(i));
+    if (rewards.length) {
+      busy.current = true;
+      setTimeout(() => {
+        setReveal(rewards);
+        play("pickup");
+      }, 450);
+    }
     setSolved((s) => [...s, p.id]);
-    setItems((held) => [
-      ...held,
-      ...p.grants.items.filter((i) => !held.includes(i)),
-    ]);
     setSelectedItem(null);
     setOpenPuzzleId(null);
     const gained = p.grants.items
@@ -156,14 +154,34 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           ? { x: `${(h.bbox[0] + h.bbox[2] / 2) * 100}%`, y: `${(h.bbox[1] + h.bbox[3] / 2) * 100}%` }
           : { x: "50%", y: "50%" },
       );
-      setTimeout(() => setPhase("won"), 1100);
+      stopAmbience();
+      setTimeout(() => {
+        setPhase("won");
+        play("win");
+      }, 1100);
     }
+  }
+
+  /** The player takes the item on show: it flies to its inventory slot, and the next one, if any, comes up. */
+  function takeItem() {
+    const [id, ...rest] = reveal;
+    if (!id) return;
+    const from = centerOf("[data-item-reveal]");
+    setItems((held) => (held.includes(id) ? held : [...held, id]));
+    setFlights((f) => [
+      ...f,
+      { key: ++counter.current, icon: itemById.get(id)?.icon ?? "✨", from, to: itemSelector(id), kind: "pickup" },
+    ]);
+    setReveal(rest);
+    if (rest.length) play("pickup");
+    else busy.current = false;
   }
 
   function inspect(h: Hotspot) {
     if (busy.current) return;
     const p = puzzleByHotspot.get(h.id);
     fx(h.id, "look");
+    play("look");
     if (!p) return setMessage(h.description);
     if (solved.includes(p.id))
       return setMessage(`${h.description} There is nothing more to find here.`);
@@ -173,6 +191,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
       p.requires.items.every((id) => items.includes(id));
     if (!ready) {
       fx(h.id, "denied");
+      play("denied");
       return setMessage(`${h.description} ${p.blockedText}`);
     }
 
@@ -231,6 +250,10 @@ export function GameEngine({ game, ranked, onExit }: Props) {
 
   function begin() {
     clockStopped.current = false;
+    // Sound may only start from a click, and this is the first one.
+    unlockAudio();
+    setMutedState(isMuted());
+    startAmbience(game.theme);
     setStartedAt(now());
     setElapsed(0);
     setPhase("playing");
@@ -295,7 +318,7 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 px-3 py-4 sm:px-6">
+    <div className={`theme-${game.theme} mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 px-3 py-4 sm:px-6`}>
       <header className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-stone-100">
@@ -318,9 +341,23 @@ export function GameEngine({ game, ranked, onExit }: Props) {
           >
             {showObjects ? "Hide" : "Show"} objects
           </button>
+          <button
+            onClick={() => {
+              setMuted(!muted);
+              setMutedState(!muted);
+            }}
+            aria-pressed={muted}
+            aria-label={muted ? "Turn sound on" : "Turn sound off"}
+            className="rounded-full border border-stone-700 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800"
+          >
+            {muted ? "Sound off" : "Sound on"}
+          </button>
           {onExit && (
             <button
-              onClick={onExit}
+              onClick={() => {
+                stopAmbience();
+                onExit();
+              }}
               className="whitespace-nowrap rounded-full border border-stone-700 px-3 py-1.5 text-xs text-stone-300 hover:bg-stone-800"
             >
               End test
@@ -349,13 +386,13 @@ export function GameEngine({ game, ranked, onExit }: Props) {
         </div>
       </header>
 
-      <div className="lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
+      <div className="room-view lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800">
         {in3d && game.scene && (
           <Room3D
             scene={game.scene}
             anchors={anchors}
             showObjects={showObjects}
-            paused={Boolean(openPuzzleId) || Boolean(escaping)}
+            paused={Boolean(openPuzzleId) || Boolean(escaping) || reveal.length > 0}
             onInspect={(id) => {
               const h = game.walls.flatMap((w) => w.hotspots).find((x) => x.id === id);
               if (h) inspect(h);
@@ -493,9 +530,14 @@ export function GameEngine({ game, ranked, onExit }: Props) {
             const ok = await checkAnswer(game, openPuzzle.id, answer);
             // The lock shows itself opening before the dialog closes.
             if (ok) setTimeout(() => solve(openPuzzle), 750);
+            else play("wrong");
             return ok;
           }}
         />
+      )}
+
+      {reveal[0] && itemById.get(reveal[0]) && (
+        <ItemReveal key={reveal[0]} item={itemById.get(reveal[0])!} more={reveal.length - 1} onTake={takeItem} />
       )}
 
       {flights.map((spec) => (

@@ -5,6 +5,7 @@ export function normalizeAnswer(kind: LockKind, raw: string): string {
   const s = raw.trim();
   if (kind === "digits") return s.replace(/\D/g, "");
   if (kind === "letters") return s.toUpperCase().replace(/[^A-Z]/g, "");
+  if (kind === "directions") return s.toUpperCase().replace(/[^NESW]/g, "");
   return s
     .toLowerCase()
     .split(",")

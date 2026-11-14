@@ -51,7 +51,7 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
       if (e.key === "Escape") return onClose();
       if (kind === "colors") return;
       if (e.key === "Backspace") return setText((t) => t.slice(0, -1));
-      const ok = kind === "digits" ? /^\d$/.test(e.key) : /^[a-zA-Z]$/.test(e.key);
+      const ok = kind === "digits" ? /^\d$/.test(e.key) : kind === "directions" ? /^[neswNESW]$/.test(e.key) : /^[a-zA-Z]$/.test(e.key);
       if (ok) setText((t) => (t.length < length ? t + e.key.toUpperCase() : t));
     };
     window.addEventListener("keydown", onKey);
@@ -112,6 +112,30 @@ export function LockModal({ title, clue, kind, length, onSubmit, onClose }: Prop
               ⌫
             </Key>
             <Key onClick={() => type("0")}>0</Key>
+            <span />
+          </div>
+        )}
+
+        {kind === "directions" && (
+          <div className="mx-auto mt-4 grid w-fit grid-cols-3 gap-2" aria-label="Compass">
+            <span />
+            <Key onClick={() => type("N")} label="North">
+              N
+            </Key>
+            <span />
+            <Key onClick={() => type("W")} label="West">
+              W
+            </Key>
+            <Key onClick={() => setText((t) => t.slice(0, -1))} label="Delete">
+              ⌫
+            </Key>
+            <Key onClick={() => type("E")} label="East">
+              E
+            </Key>
+            <span />
+            <Key onClick={() => type("S")} label="South">
+              S
+            </Key>
             <span />
           </div>
         )}
@@ -178,7 +202,7 @@ function Key({ children, onClick, label }: { children: React.ReactNode; onClick:
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="h-12 rounded-lg bg-stone-800 font-mono text-lg text-stone-100 transition-transform duration-100 hover:bg-stone-700 active:scale-90 active:bg-stone-600"
+      className="h-12 min-w-12 rounded-lg bg-stone-800 font-mono text-lg text-stone-100 transition-transform duration-100 hover:bg-stone-700 active:scale-90 active:bg-stone-600"
     >
       {children}
     </button>

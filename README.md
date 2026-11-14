@@ -70,7 +70,9 @@ src/
     image.ts                      client-side resize, metadata removal, pixelation
 ```
 
-Five puzzle templates: number lock from counted objects, colour lock from a colour order, word lock from text in the photo, hidden item, and use an item.
+Seven puzzle templates. Five are about finding: number lock from counted objects, colour lock from a colour order, word lock from text in the photo, hidden item, and use an item. Two take working out: a code the player has to calculate from several counts, and a compass lock answered with the walls that named objects stand on. For both, the rule on the lock is written by code and the answer is computed by code; the AI only chooses which facts or objects to use.
+
+Found items are shown as small 3D models built from basic shapes in code, and all sound is synthesised in the browser, so the game ships no model or audio files. Each theme (detective, horror, sci-fi) has its own colour grade, overlay and background sound.
 
 ## Run it locally
 

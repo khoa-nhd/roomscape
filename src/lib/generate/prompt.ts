@@ -40,13 +40,15 @@ Puzzle templates:
 - count_code: a number lock. Uses 1 to 4 "count" facts. The code is their values in the order you list them in factIds. The clue must say what to count and in which order, and must not contain any number.
 - color_seq: a colour lock. Uses exactly one "color_order" fact. The clue points to where the colours can be seen, without naming the colours.
 - text_cipher: a letter lock. Uses exactly one "text" fact. The clue leads the player to the word, without writing the word.
+- math_code: a number lock the player has to work out. Uses 2 or 3 "count" facts. The game multiplies the first two values and adds the third, and writes that rule on the lock itself. Your clue is one short sentence of atmosphere only: no numbers, no rule.
+- direction_lock: a compass lock. Uses no facts. Put 3 or 4 object ids in "objectIds": the answer is the wall each one is on, in that order. Choose objects on at least two different walls, whose labels no other object shares. The game writes the rule on the lock. Your clue is one short sentence of atmosphere only.
 - hidden_item: no facts, no lock. The player searches the object and finds the reward.
 - use_item: no facts, no lock. The player uses an item from an earlier puzzle on the object.
 
 Rules:
 1. The last puzzle is the exit and must sit on object ${exit.id} (${exit.label}).
 2. Every puzzle sits on a different object. Use only object ids from the list.
-3. Use each fact at most once, and use as many confirmed facts as fit. Never invent a fact, a number, a colour or a word.
+3. Prefer puzzles that make the player think: when the room allows it, include one math_code and one direction_lock. Use each fact at most once, and use as many confirmed facts as fit. Never invent a fact, a number, a colour or a word.
 4. Where you can, put a lock on a different object from the one where its fact is seen (count the books to open the drawer).
 5. "after" lists the numbers (1 = first puzzle) of earlier puzzles that must be finished first. Every puzzle except the last must appear in the "after" of a later puzzle.
 6. Every puzzle except the last gives a reward item: a short name, one emoji, one sentence. The item should make sense for the puzzle that needs it. The last puzzle has no reward.
@@ -71,6 +73,7 @@ export const PROPOSAL_RESPONSE_SCHEMA = {
           objectId: S,
           template: { type: "STRING", enum: [...TEMPLATES] },
           factIds: { type: "ARRAY", items: S },
+          objectIds: { type: "ARRAY", items: S, nullable: true },
           after: { type: "ARRAY", items: { type: "INTEGER" } },
           reward: {
             type: "OBJECT",

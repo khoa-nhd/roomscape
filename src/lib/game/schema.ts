@@ -22,6 +22,8 @@ export const TEMPLATES = [
   "hidden_item", // something tucked behind or under an object
   "use_item", // use an inventory item on an object
   "text_cipher", // word that really appears in the photo
+  "math_code", // a number worked out from several counts
+  "direction_lock", // the walls that named objects stand on, in order
 ] as const;
 export const Template = z.enum(TEMPLATES);
 export type Template = z.infer<typeof Template>;
@@ -59,7 +61,7 @@ export const Item = z.object({
 });
 export type Item = z.infer<typeof Item>;
 
-const LockKind = z.enum(["digits", "colors", "letters"]);
+const LockKind = z.enum(["digits", "colors", "letters", "directions"]);
 export type LockKind = z.infer<typeof LockKind>;
 
 const Requires = z.object({

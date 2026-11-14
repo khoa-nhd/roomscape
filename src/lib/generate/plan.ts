@@ -23,6 +23,8 @@ const ProposedPuzzle = z.object({
   objectId: z.string(),
   template: Template,
   factIds: z.array(z.string()).default([]),
+  /** direction_lock only: the objects whose walls make up the answer, in order. */
+  objectIds: z.array(z.string()).nullish(),
   /** 1-based numbers of earlier puzzles that must be finished first. */
   after: z.array(z.number()).default([]),
   reward: z.object({ name: z.string(), icon: z.string(), description: z.string() }).nullish(),
@@ -68,12 +70,22 @@ const LOCK_OF: Partial<Record<Template, { kind: LockKind; fact: Fact["kind"]; ma
   text_cipher: { kind: "letters", fact: "text", max: 1 },
 };
 
+const WALL_WORDS: Record<WallId, string> = { N: "North", E: "East", S: "South", W: "West" };
+
+/** Objects a direction lock may name: the player must be able to tell them apart by label alone. */
+export function nameable(analysis: RoomAnalysis): RoomObject[] {
+  const seen = new Map<string, number>();
+  for (const o of analysis.objects) seen.set(o.label.trim().toLowerCase(), (seen.get(o.label.trim().toLowerCase()) ?? 0) + 1);
+  return analysis.objects.filter((o) => seen.get(o.label.trim().toLowerCase()) === 1);
+}
+
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
 
 /** Does this clue give the answer away? */
 function leaks(kind: LockKind, clue: string, answer: string): boolean {
   const c = clue.toLowerCase();
   if (kind === "letters") return c.includes(answer.toLowerCase());
+  if (kind === "directions") return false;
   if (kind === "colors") return new RegExp(answer.split(",").join(".*")).test(c);
   if (new RegExp(`(^|\\D)${answer}(\\D|$)`).test(c)) return true;
   return [...answer].every((d) => new RegExp(`\\b${NUMBER_WORDS[Number(d)]}\\b`).test(c));
@@ -157,7 +169,46 @@ export function assemble(raw: unknown, input: RoomInput, gameId: string): Assemb
     let lock: DraftPuzzle["lock"];
     let grounding = { hotspotIds: [hostId], fact: `${p.template} at ${hostId}` };
     let where: string[] = [host.label];
-    if (spec) {
+    /** For puzzles that need working out: the exact rule, always written by code. */
+    let rule = "";
+    if (p.template === "math_code") {
+      const facts = p.factIds.map((id) => factById.get(id));
+      if (facts.length < 2 || facts.length > 3 || facts.some((f) => f?.kind !== "count")) {
+        return issues.push(`Puzzle ${n}: math_code needs 2 or 3 confirmed "count" facts.`);
+      }
+      const known = facts as Fact[];
+      for (const f of known) {
+        if (usedFacts.has(f.id)) issues.push(`Puzzle ${n}: fact "${f.id}" is already used by another puzzle.`);
+        usedFacts.add(f.id);
+      }
+      const [a, b, c] = known.map((f) => Number(f.value));
+      lock = { kind: "digits", answer: String(a * b + (c ?? 0)) };
+      where = known.map((f) => objectById.get(f.objectId)!.label);
+      rule =
+        `Count what you see at the ${where[0]} and at the ${where[1]}, and multiply the two numbers.` +
+        (known.length === 3 ? ` Then add what you count at the ${where[2]}.` : "") +
+        " Enter the result.";
+      grounding = {
+        hotspotIds: [...new Set(known.map((f) => hotspotId.get(f.objectId)!))],
+        fact: `math: ${known.map((f) => `${f.statement} (confirmed: ${f.value})`).join(" | ")}`,
+      };
+    } else if (p.template === "direction_lock") {
+      const allowed = new Set(nameable(input.analysis).map((o) => o.id));
+      const named = (p.objectIds ?? []).map((id) => objectById.get(id));
+      if (named.length < 3 || named.length > 4 || named.some((o) => !o || !allowed.has(o.id))) {
+        return issues.push(`Puzzle ${n}: direction_lock needs 3 or 4 objectIds, each an existing object whose label no other object shares.`);
+      }
+      const objects = named as RoomObject[];
+      if (new Set(objects.map((o) => o.id)).size !== objects.length) return issues.push(`Puzzle ${n}: direction_lock names an object twice.`);
+      if (new Set(objects.map((o) => o.wall)).size < 2) return issues.push(`Puzzle ${n}: direction_lock objects must not all be on one wall.`);
+      lock = { kind: "directions", answer: objects.map((o) => o.wall).join("") };
+      where = objects.map((o) => o.label);
+      rule = `Find these in the room, in this order: ${where.join(", then ")}. Enter the wall each one is on.`;
+      grounding = {
+        hotspotIds: objects.map((o) => hotspotId.get(o.id)!),
+        fact: `directions: ${objects.map((o) => `${o.label} is on the ${WALL_WORDS[o.wall]} wall`).join(" | ")}`,
+      };
+    } else if (spec) {
       const facts = p.factIds.map((id) => factById.get(id));
       if (facts.length < 1 || facts.length > spec.max || facts.some((f) => f?.kind !== spec.fact)) {
         return issues.push(
@@ -186,9 +237,20 @@ export function assemble(raw: unknown, input: RoomInput, gameId: string): Assemb
     const needed = requires.items.map((id) => [...itemOf.values()].find((it) => it.id === id)!.name);
 
     const length = lock ? (lock.kind === "colors" ? lock.answer.split(",").length : lock.answer.length) : 0;
-    const clue = lock && leaks(lock.kind, p.clue, lock.answer) ? plainClue(p.template, where, length) : p.clue;
+    const flavour = p.clue.length <= 160 && !(lock && leaks(lock.kind, p.clue, lock.answer)) ? p.clue : "";
+    const clue = rule
+      ? `${flavour} ${rule}`.trim()
+      : lock && leaks(lock.kind, p.clue, lock.answer)
+        ? plainClue(p.template, where, length)
+        : p.clue;
+    const spoken =
+      lock?.kind === "colors"
+        ? lock.answer.split(",").join(", then ")
+        : lock?.kind === "directions"
+          ? [...lock.answer].map((w) => WALL_WORDS[w as WallId]).join(", then ")
+          : lock?.answer;
     const explicit = lock
-      ? `The answer is ${lock.kind === "colors" ? lock.answer.split(",").join(", then ") : lock.answer}.`
+      ? `The answer is ${spoken}.`
       : needed.length
         ? `Select the ${listOf(needed)} in your inventory, then click the ${host.label}.`
         : `Click the ${host.label}.`;
@@ -257,7 +319,7 @@ const STORY = {
   },
 } as const;
 
-type Step = { template: Template; facts: Fact[]; objectId: string };
+type Step = { template: Template; facts: Fact[]; objects?: RoomObject[]; objectId: string };
 
 /** A simple linear chain that is valid by construction. Used when the AI design keeps failing. */
 export function fallbackProposal(input: RoomInput): Proposal {
@@ -272,10 +334,22 @@ export function fallbackProposal(input: RoomInput): Proposal {
     ...of("color_order").slice(0, 2).map((f) => ({ template: "color_seq" as const, facts: [f] })),
   ];
   const counts = of("count").sort((a, b) => wallOrder(a) - wallOrder(b)).slice(0, 4);
-  if (counts.length) locks.push({ template: "count_code", facts: counts });
-  while (locks.length > Math.max(target, 1)) locks.shift();
+  // Two or more counts become a sum to work out; a single count is a plain code.
+  if (counts.length >= 2) locks.push({ template: "math_code", facts: counts.slice(0, 3) });
+  else if (counts.length) locks.push({ template: "count_code", facts: counts });
 
   const door = exitObject(analysis);
+  // A direction lock needs no facts, only things the player can find by name on different walls.
+  const landmarks: RoomObject[] = [];
+  for (const o of nameable(analysis)) {
+    if (o.id === door.id || landmarks.length === 3) continue;
+    // Spread over the walls first, so the answer is not one wall repeated.
+    if (landmarks.every((l) => l.wall !== o.wall) || nameable(analysis).filter((x) => x.id !== door.id).length <= 3) landmarks.push(o);
+  }
+  const compass = landmarks.length === 3 && new Set(landmarks.map((o) => o.wall)).size >= 2;
+  while (locks.length > Math.max(target - (compass ? 1 : 0), 1)) locks.shift();
+  if (compass && analysis.objects.length >= 5) locks.unshift({ template: "direction_lock", facts: [], objects: landmarks });
+
   const used = new Set([door.id]);
   const pick = (prefer: (o: RoomObject) => boolean, avoid: Set<string>) => {
     const free = analysis.objects.filter((o) => !used.has(o.id));
@@ -294,7 +368,7 @@ export function fallbackProposal(input: RoomInput): Proposal {
 
   const steps: Step[] = [];
   for (const s of middle) {
-    const avoid = new Set(s.facts.map((f) => f.objectId));
+    const avoid = new Set([...s.facts.map((f) => f.objectId), ...(s.objects ?? []).map((o) => o.id)]);
     const host = pick((o) => (s.template === "hidden_item" ? o.canHide : o.canOpen), avoid);
     if (host) steps.push({ ...s, objectId: host.id });
   }
@@ -303,25 +377,32 @@ export function fallbackProposal(input: RoomInput): Proposal {
   const label = (id: string) => analysis.objects.find((o) => o.id === id)!.label;
   const puzzles: ProposedPuzzle[] = steps.map((s, i) => {
     const host = label(s.objectId);
-    const where = s.facts.map((f) => label(f.objectId));
+    const where = s.objects ? s.objects.map((o) => o.label) : s.facts.map((f) => label(f.objectId));
+    const thinking = s.template === "math_code" || s.template === "direction_lock";
+    const locked = s.facts.length > 0 || Boolean(s.objects);
     const prev = i > 0 ? REWARDS[(i - 1) % REWARDS.length] : null;
     const length = s.template === "color_seq" ? s.facts[0].value.split(",").length : s.facts.map((f) => f.value).join("").length;
     return {
       objectId: s.objectId,
       template: s.template,
       factIds: s.facts.map((f) => f.id),
+      objectIds: s.objects?.map((o) => o.id),
       after: i > 0 ? [i] : [],
       reward: i < steps.length - 1 ? REWARDS[i % REWARDS.length] : null,
-      clue: plainClue(s.template, where, length),
+      clue: thinking ? "This lock takes some working out." : plainClue(s.template, where, length),
       blockedText: prev ? `It will not move. It looks like it needs the ${prev.name.toLowerCase()}.` : "Nothing happens yet.",
       solvedText:
         i === steps.length - 1
           ? "The lock gives way. The door is open."
-          : s.facts.length
+          : locked
             ? `The lock on the ${host} clicks open.`
             : `You search the ${host} and find something.`,
-      hint1: s.facts.length ? "The answer is already in the room. Look around the walls." : `Have you looked at the ${host}?`,
-      hint2: s.facts.length ? `Look closely at the ${listOf(where)}.` : `The ${host} is worth a closer look.`,
+      hint1: locked ? "The answer is already in the room. Look around the walls." : `Have you looked at the ${host}?`,
+      hint2: s.objects
+        ? `Which wall is each of these on: ${listOf(where)}?`
+        : locked
+          ? `Look closely at the ${listOf(where)}.`
+          : `The ${host} is worth a closer look.`,
     };
   });
 

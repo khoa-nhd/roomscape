@@ -24,6 +24,8 @@ export function Room3D({ scene, anchors, showObjects, paused, onInspect, onFail 
   const [focus, setFocus] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [moved, setMoved] = useState(false);
+  /** Which wall the player is facing, for the compass. */
+  const [facing, setFacing] = useState(0);
   // The stage is created once; these keep its callbacks pointed at the latest props.
   const inspect = useRef(onInspect);
   const fail = useRef(onFail);
@@ -71,6 +73,17 @@ export function Room3D({ scene, anchors, showObjects, paused, onInspect, onFail 
   }, [paused, progress]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      const s = stage.current;
+      if (!s) return;
+      // Each quarter turn to the right moves one wall on: north, east, south, west.
+      const quarter = Math.round((scene.yaw - s.pose().yaw) / (Math.PI / 2));
+      setFacing(((quarter % 4) + 4) % 4);
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [scene]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => "wasd".includes(e.key.toLowerCase()) && setMoved(true);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -90,6 +103,13 @@ export function Room3D({ scene, anchors, showObjects, paused, onInspect, onFail 
 
       {progress === null && (
         <>
+          <p
+            aria-label={`Facing the ${["North", "East", "South", "West"][facing]} wall`}
+            className="pointer-events-none absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/65 px-3 py-1 text-xs text-stone-300 backdrop-blur"
+          >
+            <span className="font-mono text-sm font-semibold text-amber-300">{"NESW"[facing]}</span>
+            {["North", "East", "South", "West"][facing]} wall
+          </p>
           {/* Crosshair: what the player is looking at. */}
           <span
             aria-hidden

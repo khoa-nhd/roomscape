@@ -245,7 +245,7 @@ body {
   will-change: transform, opacity;
 }
 .item-land {
-  animation: item-land 520ms var(--ease-back) 950ms backwards;
+  animation: item-land 520ms var(--ease-back) 1000ms backwards;
 }
 @keyframes item-land {
   0% {
@@ -496,6 +496,97 @@ body {
 }
 .log-in {
   animation: msg-in 300ms var(--ease-out);
+}
+
+/* Finding an item. */
+.reveal-rise {
+  animation: rise 520ms var(--ease-out) both;
+}
+.reveal-glow {
+  background: radial-gradient(circle, rgb(252 211 77 / 0.35), rgb(252 211 77 / 0) 68%);
+  animation: reveal-glow 2.6s ease-in-out infinite;
+}
+@keyframes reveal-glow {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+.prompt-in {
+  animation: prompt-in 180ms var(--ease-out);
+}
+@keyframes prompt-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+/* Room themes: a colour grade on the room itself, and a film over it. */
+.room-view::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.theme-detective .room-view > :not(.exit-flash):not(button) {
+  filter: sepia(0.38) saturate(0.85) contrast(1.06);
+}
+.theme-detective .room-view::after {
+  background:
+    radial-gradient(ellipse at center, rgb(0 0 0 / 0) 52%, rgb(20 12 4 / 0.72) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+.theme-horror .room-view > :not(.exit-flash):not(button) {
+  filter: saturate(0.45) brightness(0.78) contrast(1.18) hue-rotate(-8deg);
+}
+.theme-horror .room-view::after {
+  background: radial-gradient(ellipse at center, rgb(0 0 0 / 0) 30%, rgb(10 0 0 / 0.9) 100%);
+  animation: horror-flicker 7s steps(1) infinite;
+}
+@keyframes horror-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  41% {
+    opacity: 0.78;
+  }
+  42% {
+    opacity: 1;
+  }
+  73% {
+    opacity: 0.7;
+  }
+  74.5% {
+    opacity: 1;
+  }
+}
+.theme-scifi .room-view > :not(.exit-flash):not(button) {
+  filter: saturate(0.8) hue-rotate(168deg) brightness(0.95) contrast(1.08);
+}
+.theme-scifi .room-view::after {
+  background:
+    repeating-linear-gradient(to bottom, rgb(120 220 255 / 0.07) 0 1px, rgb(0 0 0 / 0) 1px 4px),
+    radial-gradient(ellipse at center, rgb(0 0 0 / 0) 55%, rgb(0 20 40 / 0.7) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-rise,
+  .reveal-glow,
+  .prompt-in,
+  .theme-horror .room-view::after {
+    animation: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

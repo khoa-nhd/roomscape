@@ -101,3 +101,57 @@ test("a clue that leaks the answer is replaced, and orphan puzzles are tied to t
   assert.ok(!draft!.puzzles[0].clue.includes("ORION"));
   assert.deepEqual(draft!.puzzles[2].requires, { items: ["item2"], solved: ["p1"] });
 });
+
+const thinker = (puzzles: unknown[]) => ({
+  title: "T",
+  intro: "I",
+  outro: "O",
+  descriptions: [],
+  puzzles,
+});
+const step = (extra: object) => ({ clue: "It hums.", blockedText: "No.", solvedText: "Yes.", hint1: "h1", hint2: "h2", factIds: [], after: [], ...extra });
+
+test("math_code multiplies the first two counts and the answer never comes from the proposal", () => {
+  const { draft, issues } = assemble(
+    thinker([
+      step({ objectId: "c", template: "math_code", factIds: ["f1", "f2"], reward: { name: "Key", icon: "🗝️", description: "A key." }, clue: "The answer is 99." }),
+      step({ objectId: "e", template: "use_item", after: [1] }),
+    ]),
+    input(room, 1),
+    "t",
+  );
+  assert.deepEqual(issues, []);
+  const lock = draft!.puzzles[0].lock!;
+  assert.deepEqual([lock.kind, lock.answer], ["digits", "27"]);
+  assert.match(draft!.puzzles[0].clue, /multiply/);
+  assert.equal(draft!.puzzles[0].hints[2], "The answer is 27.");
+});
+
+test("direction_lock answers with the walls of the named objects, and refuses a bad list", () => {
+  const good = assemble(
+    thinker([
+      step({ objectId: "c", template: "direction_lock", objectIds: ["a", "g", "d"], reward: { name: "Key", icon: "🗝️", description: "A key." } }),
+      step({ objectId: "e", template: "use_item", after: [1] }),
+    ]),
+    input(room, 1),
+    "t",
+  );
+  assert.deepEqual(good.issues, []);
+  assert.deepEqual([good.draft!.puzzles[0].lock!.kind, good.draft!.puzzles[0].lock!.answer], ["directions", "NWE"]);
+  assert.equal(good.draft!.puzzles[0].hints[2], "The answer is North, then West, then East.");
+
+  const sameWall = assemble(
+    thinker([step({ objectId: "c", template: "direction_lock", objectIds: ["a", "b", "a"] }), step({ objectId: "e", template: "use_item", after: [1] })]),
+    input(room, 1),
+    "t",
+  );
+  assert.equal(sameWall.draft, null);
+});
+
+test("fallback includes a puzzle that takes working out when the room allows it", () => {
+  const { draft, issues } = assemble(fallbackProposal(input(room, 3)), input(room, 3), "t");
+  assert.deepEqual(issues, []);
+  const templates = draft!.puzzles.map((p) => p.template);
+  assert.ok(templates.includes("direction_lock"), templates.join(","));
+  assert.ok(templates.includes("math_code"), templates.join(","));
+});

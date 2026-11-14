@@ -28,6 +28,8 @@ const TEMPLATE_NAMES: Record<string, string> = {
   color_seq: "colour lock",
   text_cipher: "word lock",
   hidden_item: "hidden item",
+  math_code: "worked-out code",
+  direction_lock: "compass lock",
   use_item: "use an item",
 };
 
