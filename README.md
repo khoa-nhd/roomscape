@@ -23,7 +23,8 @@ Instead of four photos, the creator can upload a 3D scan of the room (Gaussian s
 2. The app photographs four views from that spot, out of the scan itself. Those four pictures go through the same pipeline as above, so the AI, the director screen and the solver are unchanged.
 3. Each object the AI boxed is placed in 3D: the splats seen inside its box vote on how far away it is.
 4. On publish the scan is shrunk in the browser (cropped to the room, faint splats and view-dependent colour dropped, written as `.spz`) and uploaded straight to storage with a signed URL. A 12 MB test scan became 0.7 MB.
-5. Players walk the room in first person (W A S D and mouse, or touch), and can only inspect what they are close to and looking at. The four pictures remain as a photo view, which is also the fallback for devices that cannot draw the scan.
+5. Locks appear in the scanned room as small 3D devices (keypad, colour dials, letter tiles, compass) that turn green when opened.
+6. Players walk the room in first person (W A S D and mouse, or touch), and can only inspect what they are close to and looking at. The four pictures remain as a photo view, which is also the fallback for devices that cannot draw the scan.
 
 ## Why it can be trusted
 
@@ -70,7 +71,7 @@ src/
     image.ts                      client-side resize, metadata removal, pixelation
 ```
 
-Seven puzzle templates. Five are about finding: number lock from counted objects, colour lock from a colour order, word lock from text in the photo, hidden item, and use an item. Two take working out: a code the player has to calculate from several counts, and a compass lock answered with the walls that named objects stand on. For both, the rule on the lock is written by code and the answer is computed by code; the AI only chooses which facts or objects to use.
+Eight puzzle templates. Five are about finding: number lock from counted objects, colour lock from a colour order, word lock from text in the photo, hidden item, and use an item. Three take working out: a code the player has to calculate from several counts, a compass lock answered with the walls that named objects stand on, and a code in invisible ink that only shows when the player shines a UV torch on the right object (the writing is fetched from the server at that moment, so it is never in the page). For all three, the rule on the lock is written by code and the answer is computed by code; the AI only chooses which facts or objects to use.
 
 Found items are shown as small 3D models built from basic shapes in code, and all sound is synthesised in the browser, so the game ships no model or audio files. Each theme (detective, horror, sci-fi) has its own colour grade, overlay and background sound.
 

@@ -25,7 +25,7 @@ const now = () => Date.now();
 type Phase = "intro" | "playing" | "won";
 
 /** A short effect drawn on one hotspot. `n` restarts it when the same hotspot is clicked again. */
-type Pulse = { id: string; kind: "look" | "denied" | "burst"; n: number };
+type Pulse = { id: string; kind: "look" | "denied" | "burst" | "uv"; n: number };
 
 const hotspotSelector = (id: string) => `[data-hotspot="${id}"]`;
 const itemSelector = (id: string) => `[data-item="${id}"]`;
@@ -62,9 +62,13 @@ export function GameEngine({ game, ranked, onExit }: Props) {
   const anchors = useMemo(
     () =>
       game.walls.flatMap((w) =>
-        w.hotspots.flatMap((h) => (h.pos ? [{ id: h.id, label: h.label, pos: h.pos }] : [])),
+        w.hotspots.flatMap((h) => {
+          if (!h.pos) return [];
+          const puzzle = game.puzzles.find((p) => p.hotspotId === h.id);
+          return [{ id: h.id, label: h.label, pos: h.pos, device: puzzle?.lock?.kind, done: puzzle ? solved.includes(puzzle.id) : false }];
+        }),
       ),
-    [game],
+    [game, solved],
   );
   const in3d = Boolean(game.scene) && view3d && anchors.length > 0;
   /** Items just found and not yet taken: each is shown to the player before it goes in the inventory. */
@@ -179,6 +183,11 @@ export function GameEngine({ game, ranked, onExit }: Props) {
 
   function inspect(h: Hotspot) {
     if (busy.current) return;
+    // Hidden writing: looking at the right thing with the UV torch selected shows a code.
+    const hidden = game.puzzles.find(
+      (x) => x.secret?.hotspotId === h.id && x.secret.itemId === selectedItem && !solved.includes(x.id),
+    );
+    if (hidden) return readSecret(h, hidden);
     const p = puzzleByHotspot.get(h.id);
     fx(h.id, "look");
     play("look");
@@ -223,6 +232,21 @@ export function GameEngine({ game, ranked, onExit }: Props) {
       },
     ]);
     setTimeout(() => solve(p), 460);
+  }
+
+  /** The writing is fetched only now, so the code is never sitting in the page. */
+  async function readSecret(h: Hotspot, puzzle: Puzzle) {
+    fx(h.id, "uv");
+    play("pickup");
+    setMessage(`You sweep the UV torch over the ${h.label}…`);
+    try {
+      const res = await fetch(`/api/rooms/${game.id}/secret/${puzzle.id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error();
+      setMessage(`Under the UV torch, glowing writing appears on the ${h.label}: ${data.text}`);
+    } catch {
+      setMessage("Something glows faintly, but you cannot make it out. Try again in a moment.");
+    }
   }
 
   async function askHint() {
@@ -387,7 +411,9 @@ export function GameEngine({ game, ranked, onExit }: Props) {
       </header>
 
       <div
-        className="room-view lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800"
+        className={`room-view lights-on relative overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-stone-800 ${
+          game.puzzles.some((x) => x.secret && x.secret.itemId === selectedItem) ? "uv-on" : ""
+        }`}
         onPointerMove={(e) => {
           // The torch in a dark room follows the pointer (or the last touch).
           const box = e.currentTarget.getBoundingClientRect();

@@ -42,6 +42,7 @@ Puzzle templates:
 - text_cipher: a letter lock. Uses exactly one "text" fact. The clue leads the player to the word, without writing the word.
 - math_code: a number lock the player has to work out. Uses 2 or 3 "count" facts. The game multiplies the first two values and adds the third, and writes that rule on the lock itself. Your clue is one short sentence of atmosphere only: no numbers, no rule.
 - direction_lock: a compass lock. Uses no facts. Put 3 or 4 object ids in "objectIds": the answer is the wall each one is on, in that order. Choose objects on at least two different walls, whose labels no other object shares. The game writes the rule on the lock. Your clue is one short sentence of atmosphere only.
+- uv_code: a number lock whose code is written in invisible ink. Uses no facts: the game makes the code. Put exactly one object id in "objectIds": a different object, where the writing is hidden. It must come "after" an earlier puzzle whose reward is a UV torch (name that reward "UV torch"). The player selects the torch and looks at that object to read the code. Your clue is one short sentence of atmosphere only.
 - hidden_item: no facts, no lock. The player searches the object and finds the reward.
 - use_item: no facts, no lock. The player uses an item from an earlier puzzle on the object.
 

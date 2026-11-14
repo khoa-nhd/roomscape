@@ -23,7 +23,7 @@ const ProposedPuzzle = z.object({
   objectId: z.string(),
   template: Template,
   factIds: z.array(z.string()).default([]),
-  /** direction_lock only: the objects whose walls make up the answer, in order. */
+  /** direction_lock: the objects whose walls make up the answer, in order. uv_code: the one object the hidden writing is on. */
   objectIds: z.array(z.string()).nullish(),
   /** 1-based numbers of earlier puzzles that must be finished first. */
   after: z.array(z.number()).default([]),
@@ -77,6 +77,19 @@ export function nameable(analysis: RoomAnalysis): RoomObject[] {
   const seen = new Map<string, number>();
   for (const o of analysis.objects) seen.set(o.label.trim().toLowerCase(), (seen.get(o.label.trim().toLowerCase()) ?? 0) + 1);
   return analysis.objects.filter((o) => seen.get(o.label.trim().toLowerCase()) === 1);
+}
+
+const UV_TORCH = {
+  name: "UV torch",
+  icon: "🔦",
+  description: "A small ultraviolet torch. Select it, then look at things: it shows what ordinary light hides.",
+};
+
+/** A three-digit code that is the same every time for the same room and puzzle, with no zeros. */
+function secretCode(gameId: string, n: number): string {
+  let h = 2166136261 ^ n;
+  for (const ch of gameId) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return [0, 1, 2].map((i) => String(1 + ((h >>> (i * 7)) % 9))).join("");
 }
 
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
@@ -157,6 +170,17 @@ export function assemble(raw: unknown, input: RoomInput, gameId: string): Assemb
     if (!after.some((list, i) => i > j && list.includes(j + 1))) after[last].push(j + 1);
   }
 
+  // Hidden writing needs a light: the reward of an earlier puzzle becomes the UV torch.
+  const torchFor = new Map<number, Item>();
+  proposal.puzzles.forEach((p, i) => {
+    if (p.template !== "uv_code") return;
+    const giver = after[i].map((m) => m - 1).find((j) => itemOf.has(j));
+    if (giver === undefined) return;
+    const item = itemOf.get(giver)!;
+    if (!/uv|ultraviolet|black ?light/i.test(item.name)) Object.assign(item, UV_TORCH);
+    torchFor.set(i, item);
+  });
+
   const usedFacts = new Set<string>();
   const puzzles: DraftPuzzle[] = [];
   proposal.puzzles.forEach((p, i) => {
@@ -171,7 +195,22 @@ export function assemble(raw: unknown, input: RoomInput, gameId: string): Assemb
     let where: string[] = [host.label];
     /** For puzzles that need working out: the exact rule, always written by code. */
     let rule = "";
-    if (p.template === "math_code") {
+    let secret: DraftPuzzle["secret"];
+    let pointed = "";
+    if (p.template === "uv_code") {
+      const surface = objectById.get((p.objectIds ?? [])[0] ?? "");
+      if (!surface || surface.id === host.id) {
+        return issues.push(`Puzzle ${n}: uv_code needs one id in objectIds: a different object, where the hidden writing is.`);
+      }
+      const torch = torchFor.get(i);
+      if (!torch) return issues.push(`Puzzle ${n}: uv_code must come after a puzzle that gives a reward (it becomes the UV torch).`);
+      lock = { kind: "digits", answer: secretCode(gameId, n) };
+      where = [surface.label];
+      rule = "The code is written somewhere in this room, in ink that only ultraviolet light shows.";
+      pointed = `Select the ${torch.name} in your inventory, then look at the ${surface.label}.`;
+      secret = { hotspotId: hotspotId.get(surface.id)!, itemId: torch.id };
+      grounding = { hotspotIds: [hotspotId.get(surface.id)!], fact: `uv: hidden writing on ${hotspotId.get(surface.id)} for puzzle ${n}` };
+    } else if (p.template === "math_code") {
       const facts = p.factIds.map((id) => factById.get(id));
       if (facts.length < 2 || facts.length > 3 || facts.some((f) => f?.kind !== "count")) {
         return issues.push(`Puzzle ${n}: math_code needs 2 or 3 confirmed "count" facts.`);
@@ -262,11 +301,12 @@ export function assemble(raw: unknown, input: RoomInput, gameId: string): Assemb
       hotspotId: hostId,
       requires,
       clue,
-      blockedText: p.blockedText,
+      blockedText: secret ? "It wants a code, and you have no way to find one yet." : p.blockedText,
       solvedText: p.solvedText,
       grounding,
       grants: { items: reward ? [reward.id] : [] },
-      hints: [p.hint1, p.hint2, explicit],
+      hints: [p.hint1, pointed || p.hint2, explicit],
+      ...(secret ? { secret } : {}),
       ...(lock ? { lock } : {}),
     });
   });
@@ -364,6 +404,11 @@ export function fallbackProposal(input: RoomInput): Proposal {
     ...locks.slice(0, -1),
     ...Array.from({ length: Math.max(0, fillers - 1 - (locks.length ? 0 : 1)) }, () => ({ template: "use_item" as const, facts: [] })),
   ];
+  // With enough objects and difficulty, one code is written in invisible ink on something else in the room.
+  const surface = analysis.objects.filter((o) => o.id !== door.id).at(-1);
+  if (settings.difficulty >= 2 && analysis.objects.length >= 6 && middle.length >= 1 && surface) {
+    middle.splice(1, 0, { template: "uv_code" as const, facts: [], objects: [surface] });
+  }
   const final = locks[locks.length - 1] ?? { template: "use_item" as const, facts: [] };
 
   const steps: Step[] = [];
@@ -389,7 +434,12 @@ export function fallbackProposal(input: RoomInput): Proposal {
       objectIds: s.objects?.map((o) => o.id),
       after: i > 0 ? [i] : [],
       reward: i < steps.length - 1 ? REWARDS[i % REWARDS.length] : null,
-      clue: thinking ? "This lock takes some working out." : plainClue(s.template, where, length),
+      clue:
+        s.template === "uv_code"
+          ? "Someone wrote the code down, then made sure nobody could read it."
+          : thinking
+            ? "This lock takes some working out."
+            : plainClue(s.template, where, length),
       blockedText: prev ? `It will not move. It looks like it needs the ${prev.name.toLowerCase()}.` : "Nothing happens yet.",
       solvedText:
         i === steps.length - 1

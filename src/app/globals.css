@@ -571,6 +571,37 @@ body {
     opacity: 1;
   }
 }
+/* UV torch: the room turns violet while it is in hand, and hidden writing flares when found. */
+.room-view.uv-on::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at center, rgb(139 92 246 / 0.16) 0%, rgb(76 29 149 / 0.5) 100%);
+  mix-blend-mode: screen;
+}
+.fx-uv {
+  border: 2px solid rgb(196 181 253);
+  background: radial-gradient(circle, rgb(167 139 250 / 0.55), rgb(167 139 250 / 0) 70%);
+  box-shadow: 0 0 34px rgb(167 139 250 / 0.8);
+  animation: fx-uv 1400ms ease-out forwards;
+}
+@keyframes fx-uv {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
 /* Horror, photo view: the room is dark and a torch beam follows the pointer. */
 .torch {
   position: absolute;

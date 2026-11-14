@@ -24,6 +24,7 @@ export const TEMPLATES = [
   "text_cipher", // word that really appears in the photo
   "math_code", // a number worked out from several counts
   "direction_lock", // the walls that named objects stand on, in order
+  "uv_code", // a code written where only the UV torch shows it
 ] as const;
 export const Template = z.enum(TEMPLATES);
 export type Template = z.infer<typeof Template>;
@@ -84,6 +85,11 @@ const PuzzleBase = z.object({
   /** The real-world fact this puzzle rests on, confirmed by the creator. */
   grounding: z.object({ hotspotIds: z.array(Id), fact: z.string().min(1) }),
   grants: z.object({ items: z.array(Id).default([]) }).default({ items: [] }),
+  /**
+   * Hidden writing: inspecting `hotspotId` while holding `itemId` shows this puzzle's answer.
+   * The writing itself is never in the page; it is fetched from the server when revealed.
+   */
+  secret: z.object({ hotspotId: Id, itemId: Id }).optional(),
   /** Vague, pointed, explicit. */
   hints: z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]),
 });

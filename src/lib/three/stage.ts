@@ -11,7 +11,16 @@ import type { WallId } from "../game/schema";
  * - "walk": eye height is fixed and the player stays inside the room, like a first-person game.
  */
 
-export type Anchor = { id: string; label: string; pos: Vec3 };
+export type Device = "digits" | "colors" | "letters" | "directions";
+export type Anchor = {
+  id: string;
+  label: string;
+  pos: Vec3;
+  /** A lock sits here: it is shown as a small device fixed to the object. */
+  device?: Device;
+  /** The lock has been opened. */
+  done?: boolean;
+};
 export type SplatSource = { url: string; format: "spz" | "ply" } | { bytes: ArrayBuffer; format: "spz" | "ply" };
 
 type Options = {
@@ -35,6 +44,8 @@ export class Stage {
   private scene = new THREE.Scene();
   private mesh: SplatMesh | null = null;
   private markers = new THREE.Group();
+  /** Lock devices: real 3D objects added to the scanned room. */
+  private props = new THREE.Group();
   private anchors: Anchor[] = [];
   private focused: string | null = null;
   private showAll = false;
@@ -77,6 +88,12 @@ export class Stage {
 
     this.scene.add(new SparkRenderer({ renderer: this.renderer }));
     this.scene.add(this.markers);
+    this.scene.add(this.props);
+    // Only the added devices are lit by these; the scan carries its own baked lighting.
+    this.scene.add(new THREE.HemisphereLight(0xfff4e0, 0x292524, 1.4));
+    const lamp = new THREE.DirectionalLight(0xffffff, 1.6);
+    lamp.position.set(1, 3, 2);
+    this.scene.add(lamp);
     this.camera.rotation.order = "YXZ";
 
     this.resize = new ResizeObserver(() => this.fit());
@@ -177,6 +194,29 @@ export class Stage {
       sprite.userData.id = a.id;
       this.markers.add(sprite);
     }
+
+    for (const old of [...this.props.children]) {
+      old.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.props.remove(old);
+    }
+    const centre = new THREE.Vector3(...(this.frame?.origin ?? [0, 0, 0]));
+    for (const a of anchors) {
+      if (!a.device) continue;
+      const device = buildDevice(a.device, Boolean(a.done));
+      const at = new THREE.Vector3(...a.pos);
+      // Faces the middle of the room, and stands a little proud of the surface it is on.
+      const out = centre.clone().sub(at).setY(0).normalize();
+      // The measured surface is only approximate, so the device floats clear of it instead of sinking in.
+      device.position.copy(at).addScaledVector(out, 0.12);
+      device.scale.setScalar(1.5);
+      device.lookAt(centre.x, at.y, centre.z);
+      this.props.add(device);
+    }
   }
 
   /**
@@ -208,6 +248,7 @@ export class Stage {
     const saved = { pos: this.camera.position.clone(), yaw: this.yaw, pitch: this.pitch, fov: this.camera.fov, markers: this.markers.visible };
     this.paused = true;
     this.markers.visible = false;
+    this.props.visible = false;
     this.camera.position.set(...frame.origin);
     this.yaw = wallYaw(frame, wall);
     this.pitch = 0;
@@ -226,6 +267,7 @@ export class Stage {
     this.pitch = saved.pitch;
     this.camera.fov = saved.fov;
     this.markers.visible = saved.markers;
+    this.props.visible = true;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.fit();
     this.paused = false;
@@ -345,6 +387,8 @@ export class Stage {
         sprite.scale.setScalar(0.34 + Math.sin(performance.now() / 180) * 0.03);
       }
     }
+    // Devices are drawn over the scan, so far ones are hidden: otherwise they would show through walls.
+    for (const device of this.props.children) device.visible = device.position.distanceTo(this.camera.position) < 4.5;
     if (best !== this.focused) {
       this.focused = best;
       this.options.onFocus?.(best);
@@ -435,6 +479,50 @@ export class Stage {
   };
 
   private onBlur = () => this.keys.clear();
+}
+
+/** A small lock device, about 20 cm wide, with its face on +z. What is on the face depends on the kind of lock. */
+function buildDevice(kind: Device, done: boolean): THREE.Group {
+  const g = new THREE.Group();
+  const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    // Drawn after the scan and on top of it, in the order the parts are added: body first, face last.
+    // The scan's surface is only roughly known, so depth-testing against it would bury the device.
+    material.depthTest = false;
+    material.transparent = true;
+    mesh.renderOrder = 6 + g.children.length * 0.01;
+    g.add(mesh);
+    return mesh;
+  };
+  const shell = new THREE.MeshStandardMaterial({ color: 0x1f1f23, metalness: 0.7, roughness: 0.4 });
+  const glow = (color: number, strength = 1.4) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: strength, roughness: 0.4 });
+  const key = new THREE.MeshStandardMaterial({ color: 0x57534e, metalness: 0.3, roughness: 0.6 });
+
+  add(new THREE.BoxGeometry(0.2, 0.27, 0.045), shell, 0, 0, 0);
+  // Status light and screen: amber while locked, green once opened.
+  add(new THREE.BoxGeometry(0.16, 0.05, 0.01), glow(done ? 0x34d399 : 0xfbbf24, done ? 1.8 : 1.1), 0, 0.09, 0.025);
+
+  if (kind === "digits") {
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) add(new THREE.BoxGeometry(0.038, 0.038, 0.012), key, (col - 1) * 0.052, 0.025 - row * 0.052, 0.027);
+    }
+  } else if (kind === "colors") {
+    [0xdc4444, 0xe6c532, 0x3b7de0].forEach((color, i) => {
+      const dial = add(new THREE.CylinderGeometry(0.026, 0.026, 0.014, 24), glow(color, 0.5), (i - 1) * 0.058, -0.03, 0.028);
+      dial.rotation.x = Math.PI / 2;
+    });
+  } else if (kind === "letters") {
+    for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.028, 0.045, 0.012), glow(0xe7e5e4, 0.35), (i - 2) * 0.034, -0.03, 0.027);
+  } else {
+    const ring = add(new THREE.TorusGeometry(0.06, 0.008, 12, 40), key, 0, -0.035, 0.028);
+    ring.rotation.set(0, 0, 0);
+    for (let i = 0; i < 4; i++) {
+      const arrow = add(new THREE.ConeGeometry(0.014, 0.034, 12), glow(i === 0 ? 0xf87171 : 0xe7e5e4, 0.5), Math.sin((i * Math.PI) / 2) * 0.038, -0.035 + Math.cos((i * Math.PI) / 2) * 0.038, 0.03);
+      arrow.rotation.z = -(i * Math.PI) / 2;
+    }
+  }
+  return g;
 }
 
 /** A soft round glow, drawn once and shared by every marker. */

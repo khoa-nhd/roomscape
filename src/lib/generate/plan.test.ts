@@ -155,3 +155,40 @@ test("fallback includes a puzzle that takes working out when the room allows it"
   assert.ok(templates.includes("direction_lock"), templates.join(","));
   assert.ok(templates.includes("math_code"), templates.join(","));
 });
+
+test("uv_code makes its own code, turns the earlier reward into the torch, and says where to shine it", () => {
+  const { draft, issues } = assemble(
+    thinker([
+      step({ objectId: "b", template: "hidden_item", reward: { name: "Old coin", icon: "🪙", description: "A coin." } }),
+      step({ objectId: "c", template: "uv_code", objectIds: ["d"], after: [1], reward: { name: "Key", icon: "🗝️", description: "A key." } }),
+      step({ objectId: "e", template: "use_item", after: [2] }),
+    ]),
+    input(room, 2),
+    "t",
+  );
+  assert.deepEqual(issues, []);
+  const uv = draft!.puzzles[1];
+  assert.match(uv.lock!.answer, /^[1-9]{3}$/);
+  assert.equal(draft!.items[0].name, "UV torch");
+  assert.deepEqual(uv.secret, { hotspotId: "e_h2", itemId: "item1" });
+  assert.deepEqual(uv.requires.items, ["item1"]);
+  assert.equal(uv.hints[1], "Select the UV torch in your inventory, then look at the poster.");
+  // Same room, same code: the server can always tell the player what the writing says.
+  const again = assemble(
+    thinker([
+      step({ objectId: "b", template: "hidden_item", reward: { name: "Old coin", icon: "🪙", description: "A coin." } }),
+      step({ objectId: "c", template: "uv_code", objectIds: ["d"], after: [1], reward: { name: "Key", icon: "🗝️", description: "A key." } }),
+      step({ objectId: "e", template: "use_item", after: [2] }),
+    ]),
+    input(room, 2),
+    "t",
+  );
+  assert.equal(again.draft!.puzzles[1].lock!.answer, uv.lock!.answer);
+
+  const noTorch = assemble(
+    thinker([step({ objectId: "c", template: "uv_code", objectIds: ["d"] }), step({ objectId: "e", template: "use_item", after: [1] })]),
+    input(room, 2),
+    "t",
+  );
+  assert.equal(noTorch.draft, null);
+});
