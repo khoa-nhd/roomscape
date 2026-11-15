@@ -102,75 +102,137 @@ export function play(sfx: Sfx) {
   }
 }
 
-/** A quiet background bed for the room's theme. Replaces whatever was playing. */
+/** Note frequency, counted in semitones from A3 (220 Hz). */
+const hz = (semitones: number) => 220 * 2 ** (semitones / 12);
+
+type Score = {
+  /** Seconds per beat. */
+  beat: number;
+  /** Chords, one per bar of eight beats, as semitones from A3. */
+  chords: number[][];
+  /** Notes the tune may use, low to high. */
+  scale: number[];
+  /** Chance that a beat carries a tune note. */
+  density: number;
+  lead: OscillatorType;
+  leadVolume: number;
+  padVolume: number;
+  /** How bright the whole mix is, in Hz. */
+  tone: number;
+};
+
+const SCORES: Record<Mood, Score> = {
+  // Slow, smoky minor: a late-night piano over held chords.
+  detective: {
+    beat: 0.62,
+    chords: [[-12, 0, 3, 7], [-16, -4, 0, 5], [-19, -7, 2, 5], [-17, -5, -1, 2]],
+    scale: [0, 3, 5, 7, 10, 12, 15, 17],
+    density: 0.55,
+    lead: "triangle",
+    leadVolume: 0.07,
+    padVolume: 0.028,
+    tone: 2200,
+  },
+  // A music box that has been left running: sparse, high, slightly wrong.
+  horror: {
+    beat: 0.95,
+    chords: [[-19, -7, -4, 0], [-20, -8, -4, -1], [-19, -7, -4, 0], [-23, -11, -5, -2]],
+    scale: [5, 8, 11, 12, 15, 17, 20],
+    density: 0.4,
+    lead: "sine",
+    leadVolume: 0.06,
+    padVolume: 0.032,
+    tone: 1500,
+  },
+  // A steady, bright arpeggio over wide chords.
+  scifi: {
+    beat: 0.31,
+    chords: [[-12, 0, 7, 12], [-16, -4, 3, 8], [-9, 3, 7, 10], [-14, -2, 5, 10]],
+    scale: [0, 3, 7, 10, 12, 15, 19, 22],
+    density: 0.8,
+    lead: "triangle",
+    leadVolume: 0.045,
+    padVolume: 0.024,
+    tone: 3200,
+  },
+};
+
+/** Background music for the room's theme, composed as it plays. Replaces whatever was playing. */
 export function startAmbience(mood: Mood) {
   stopAmbience();
   if (!ctx || !master) return;
-  const out = ctx.createGain();
-  out.gain.value = 0;
-  out.gain.linearRampToValueAtTime(1, ctx.currentTime + 2.5);
-  out.connect(master);
-  const nodes: (AudioScheduledSourceNode | AudioNode)[] = [];
-  const timers: number[] = [];
+  const audio = ctx;
+  const score = SCORES[mood];
 
-  const drone = (freq: number, type: OscillatorType, volume: number, wobble = 0) => {
-    const osc = ctx!.createOscillator();
-    const gain = ctx!.createGain();
+  const out = audio.createGain();
+  out.gain.value = 0;
+  out.gain.linearRampToValueAtTime(1, audio.currentTime + 3);
+  const soften = audio.createBiquadFilter();
+  soften.type = "lowpass";
+  soften.frequency.value = score.tone;
+  soften.connect(out).connect(master);
+
+  // An echo gives the few notes some room to ring in.
+  const echo = audio.createDelay(2);
+  echo.delayTime.value = score.beat * 1.5;
+  const feedback = audio.createGain();
+  feedback.gain.value = 0.35;
+  echo.connect(feedback).connect(echo);
+  echo.connect(soften);
+
+  /** One soft note: slow in, slow out. */
+  const note = (freq: number, at: number, length: number, type: OscillatorType, volume: number, attack: number, wet: boolean) => {
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
     osc.type = type;
     osc.frequency.value = freq;
-    gain.gain.value = volume;
-    if (wobble) {
-      const lfo = ctx!.createOscillator();
-      const depth = ctx!.createGain();
-      lfo.frequency.value = wobble;
-      depth.gain.value = volume * 0.6;
-      lfo.connect(depth).connect(gain.gain);
-      lfo.start();
-      nodes.push(lfo);
-    }
-    osc.connect(gain).connect(out);
-    osc.start();
-    nodes.push(osc);
-  };
-  const hiss = (freq: number, q: number, volume: number, type: BiquadFilterType = "bandpass") => {
-    const source = ctx!.createBufferSource();
-    source.buffer = noiseBuffer(3);
-    source.loop = true;
-    const filter = ctx!.createBiquadFilter();
-    filter.type = type;
-    filter.frequency.value = freq;
-    filter.Q.value = q;
-    const gain = ctx!.createGain();
-    gain.gain.value = volume;
-    source.connect(filter).connect(gain).connect(out);
-    source.start();
-    nodes.push(source);
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(volume, at + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + length);
+    osc.connect(gain).connect(soften);
+    if (wet) gain.connect(echo);
+    osc.start(at);
+    osc.stop(at + length + 0.1);
   };
 
-  if (mood === "detective") {
-    // Rain on a window, and a clock.
-    hiss(5200, 0.4, 0.05, "highpass");
-    hiss(900, 0.6, 0.03);
-    timers.push(window.setInterval(() => !muted && tone(1900, 0, 0.03, "square", 0.02), 1000));
-  } else if (mood === "horror") {
-    drone(46, "sine", 0.16, 0.13);
-    drone(69.5, "sine", 0.06, 0.07);
-    hiss(240, 2, 0.03);
-  } else {
-    drone(110, "sawtooth", 0.012);
-    drone(55, "sine", 0.12, 0.2);
-    hiss(3200, 6, 0.012);
-    timers.push(window.setInterval(() => !muted && tone(1480, 0, 0.09, "sine", 0.025), 5300));
-  }
+  let beat = 0;
+  let step = 3; // where the tune is in the scale
+  const tick = () => {
+    if (muted || audio.state !== "running") return;
+    const at = audio.currentTime + 0.05;
+    const bar = Math.floor(beat / 8) % score.chords.length;
+    const chord = score.chords[bar];
+    if (beat % 8 === 0) {
+      // Held chord: each voice doubled a few cents apart so it shimmers instead of buzzing.
+      const length = score.beat * 9;
+      for (const n of chord) {
+        note(hz(n) * 0.997, at, length, "sine", score.padVolume, length * 0.3, false);
+        note(hz(n) * 1.003, at, length, "triangle", score.padVolume * 0.6, length * 0.3, false);
+      }
+    }
+    if (mood === "scifi") {
+      // The arpeggio walks up the chord, an octave higher, and rests now and then.
+      if (Math.random() < score.density) note(hz(chord[beat % chord.length] + 12), at, score.beat * 2.2, score.lead, score.leadVolume, 0.01, true);
+    } else if (Math.random() < score.density || beat % 8 === 0) {
+      // The tune moves by small steps, so it sounds played, not random.
+      step = Math.max(0, Math.min(score.scale.length - 1, step + [-2, -1, -1, 1, 1, 2][Math.floor(Math.random() * 6)]));
+      note(hz(score.scale[step]), at, score.beat * 3.5, score.lead, score.leadVolume, 0.015, true);
+      if (mood === "detective") note(hz(score.scale[step]) * 2, at, score.beat * 1.5, "sine", score.leadVolume * 0.25, 0.01, true);
+    }
+    beat++;
+  };
+  tick();
+  const timer = window.setInterval(tick, score.beat * 1000);
 
   ambience = {
     stop() {
-      timers.forEach((t) => window.clearInterval(t));
-      if (!ctx) return;
-      out.gain.cancelScheduledValues(ctx.currentTime);
-      out.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+      window.clearInterval(timer);
+      out.gain.cancelScheduledValues(audio.currentTime);
+      out.gain.setTargetAtTime(0, audio.currentTime, 0.3);
       window.setTimeout(() => {
-        nodes.forEach((n) => "stop" in n && (n as AudioScheduledSourceNode).stop());
+        feedback.disconnect();
+        echo.disconnect();
+        soften.disconnect();
         out.disconnect();
       }, 1500);
     },
